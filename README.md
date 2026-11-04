@@ -41,6 +41,19 @@
 
 ---
 
+## Exit password / 終了パスワード
+
+- **EN:** **Exit Idle Guard** and the **Start at sign-in** toggle in the tray menu ask for a password. Only its hash is stored in `config.json` (`ExitPasswordHash`), never the password itself. Give the password only to administrators.
+  **JP:** トレイメニューの **終了** と **サインイン時に自動起動** の切り替えには、パスワードが必要です。`config.json` (`ExitPasswordHash`) に保存するのはハッシュ値だけで、パスワード自体は保存しません。パスワードは管理者だけに伝えてください。
+- **EN:** This deters casual exits. It cannot stop someone who ends PowerShell in Task Manager or edits `config.json`.
+  **JP:** うっかり終了を防ぐための抑止策です。タスクマネージャーでの PowerShell の強制終了や、`config.json` の書き換えは防げません。
+- **EN:** To change the password, run the following in PowerShell with your new password, paste the result into `ExitPasswordHash` in `config.json`, then restart the tool.
+  **JP:** パスワードを変更するには、新しいパスワードを入れて PowerShell で次を実行し、出力を `config.json` の `ExitPasswordHash` に貼り付けて、ツールを再起動します。
+
+```powershell
+$s = [Security.Cryptography.SHA256]::Create(); ($s.ComputeHash([Text.Encoding]::UTF8.GetBytes('CatiaIdleGuard:' + 'NEW-PASSWORD')) | ForEach-Object { $_.ToString('x2') }) -join ''
+```
+
 ## Files / ファイル構成
 
 | File / ファイル | Purpose (EN) | 役割 (JP) |
@@ -99,6 +112,7 @@
 | `LogFolder` | `"logs"` | Log folder. Relative paths are from the script folder | ログ出力先 (相対パスはスクリプトのフォルダ基準) |
 | `LogRetentionDays` | `30` | Days to keep logs | ログの保持日数 |
 | `AutoStartup` | `true` | Register auto-start at sign-in when started with `Start-CatiaIdleGuard.bat`. Also changed by the tray menu | `Start-CatiaIdleGuard.bat` で起動したときにサインイン時の自動起動を登録する。トレイメニューでも切り替え可 |
+| `ExitPasswordHash` | (hash) | Password for **Exit Idle Guard** and the **Start at sign-in** toggle, stored as SHA-256 of `CatiaIdleGuard:` + password. Empty `""` = no password | トレイの **終了** と **サインイン時に自動起動** の切り替えに必要なパスワード。`CatiaIdleGuard:` + パスワード の SHA-256 で保存。空 `""` でパスワードなし |
 
 ---
 

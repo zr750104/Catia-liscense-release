@@ -100,6 +100,9 @@ $script:DefaultConfig = [ordered]@{
     LogFolder             = 'logs'      # Relative to the script folder / スクリプトフォルダからの相対パス
     LogRetentionDays      = 30
     AutoStartup           = $true       # Register auto-start at sign-in when started normally / 通常起動時にサインイン時の自動起動を登録する
+    # SHA-256 of "CatiaIdleGuard:" + password. Empty = no password. See README to change it.
+    # "CatiaIdleGuard:" + パスワード の SHA-256。空ならパスワードなし。変更方法は README を参照。
+    ExitPasswordHash      = '09051bb0e9234daaf296e3f915794e6a3655c9236370bfd92fb4a8f4b7d4d355'
 }
 
 function Get-Config {
@@ -659,6 +662,100 @@ function Show-WarningDialog {
 }
 
 # ------------------------------------------------------------------
+# Password (exit / auto-start setting) / パスワード (終了・自動起動の設定変更)
+#   EN: Only the salted SHA-256 hash is stored, never the password itself.
+#       This deters casual exits; it cannot stop someone ending the process in Task Manager.
+#   JP: 保存するのはソルト付き SHA-256 のハッシュだけで、パスワード自体は保存しない。
+#       うっかり終了を防ぐ抑止策であり、タスクマネージャーでの強制終了は防げない。
+# ------------------------------------------------------------------
+function Get-PasswordHash {
+    param([string]$Text)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes('CatiaIdleGuard:' + $Text))
+        return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
+    }
+    finally { $sha.Dispose() }
+}
+
+function Confirm-Password {
+    # Returns $true if the password is correct or no password is set / 正しい、またはパスワード未設定なら $true
+    param([ValidateSet('exit', 'autostart')][string]$Action)
+    $expected = [string]$script:Config.ExitPasswordHash
+    if ([string]::IsNullOrWhiteSpace($expected)) { return $true }
+
+    if ($Action -eq 'exit') {
+        $en = 'Enter the password to exit CATIA Idle Guard.'
+        $jp = 'CATIA Idle Guard を終了するには、パスワードを入力してください。'
+        $th = 'กรุณาใส่รหัสผ่านเพื่อปิด CATIA Idle Guard'
+    }
+    else {
+        $en = 'Enter the password to change the auto-start setting.'
+        $jp = '自動起動の設定を変更するには、パスワードを入力してください。'
+        $th = 'กรุณาใส่รหัสผ่านเพื่อเปลี่ยนการตั้งค่าเริ่มอัตโนมัติ'
+    }
+
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = 'CATIA Idle Guard'
+    $form.ClientSize = New-Object System.Drawing.Size(470, 200)
+    $form.StartPosition = 'CenterScreen'
+    $form.TopMost = $true
+    $form.FormBorderStyle = 'FixedDialog'
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.ShowInTaskbar = $true
+
+    $y = 12
+    foreach ($line in @(@{ T = $en; F = 'Segoe UI' }, @{ T = $jp; F = $script:UiFont }, @{ T = $th; F = $script:ThaiFont })) {
+        $l = New-Object System.Windows.Forms.Label
+        $l.AutoSize = $false
+        $l.Location = New-Object System.Drawing.Point(15, $y)
+        $l.Size = New-Object System.Drawing.Size(440, 26)
+        $l.Font = New-Object System.Drawing.Font($line.F, 9.5)
+        $l.Text = $line.T
+        $form.Controls.Add($l)
+        $y += 28
+    }
+
+    $box = New-Object System.Windows.Forms.TextBox
+    $box.UseSystemPasswordChar = $true
+    $box.Location = New-Object System.Drawing.Point(15, 104)
+    $box.Size = New-Object System.Drawing.Size(440, 26)
+    $box.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+    $form.Controls.Add($box)
+
+    $ok = New-Object System.Windows.Forms.Button
+    $ok.Text = 'OK'
+    $ok.Size = New-Object System.Drawing.Size(100, 32)
+    $ok.Location = New-Object System.Drawing.Point(245, 150)
+    $ok.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $form.Controls.Add($ok)
+    $form.AcceptButton = $ok
+
+    $cancel = New-Object System.Windows.Forms.Button
+    $cancel.Text = 'Cancel / キャンセル'
+    $cancel.Size = New-Object System.Drawing.Size(110, 32)
+    $cancel.Location = New-Object System.Drawing.Point(355, 150)
+    $cancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+    $form.Controls.Add($cancel)
+    $form.CancelButton = $cancel
+
+    $form.Add_Shown({ $form.Activate(); $box.Focus() }.GetNewClosure())
+    $result = $form.ShowDialog()
+    $entered = $box.Text
+    $form.Dispose()
+
+    if ($result -ne [System.Windows.Forms.DialogResult]::OK) { return $false }
+    if ((Get-PasswordHash $entered) -eq $expected) { return $true }
+
+    Write-Log -Level WARN -Message "Wrong password ($Action) / パスワード誤り ($Action)"
+    [void][System.Windows.Forms.MessageBox]::Show(
+        "Wrong password.`r`nパスワードが違います。`r`nรหัสผ่านไม่ถูกต้อง",
+        'CATIA Idle Guard', 'OK', 'Warning')
+    return $false
+}
+
+# ------------------------------------------------------------------
 # Auto-start at sign-in / サインイン時の自動起動
 #   EN: A shortcut to Start-CatiaIdleGuard.bat in the user's Startup folder. It is re-created if the
 #       tool folder was moved. Turned on/off from the tray menu; the choice is saved in config.json.
@@ -750,6 +847,7 @@ function Initialize-Tray {
     $itemAuto.Checked = (Test-AutoStartup)
     $itemAuto.Add_Click({
         # $this = the clicked menu item / クリックされたメニュー項目
+        if (-not (Confirm-Password -Action 'autostart')) { return }
         try {
             if ($this.Checked) {
                 Unregister-AutoStartup
@@ -768,7 +866,12 @@ function Initialize-Tray {
     [void]$menu.Items.Add($itemAuto)
     [void]$menu.Items.Add('-')
     $itemExit = $menu.Items.Add('Exit Idle Guard / Idle Guard を終了 / ปิด Idle Guard')
-    $itemExit.Add_Click({ $script:Running = $false })
+    $itemExit.Add_Click({
+        if (Confirm-Password -Action 'exit') {
+            Write-Log -Message 'Exit requested from the tray menu / トレイメニューから終了'
+            $script:Running = $false
+        }
+    })
     $icon.ContextMenuStrip = $menu
 
     $script:Tray = @{ Icon = $icon; Status = $itemStatus }

@@ -8,5 +8,6 @@
   "QuitWithoutComAccess": false,
   "LogFolder": "logs",
   "LogRetentionDays": 30,
-  "AutoStartup": true
+  "AutoStartup": true,
+  "ExitPasswordHash": "09051bb0e9234daaf296e3f915794e6a3655c9236370bfd92fb4a8f4b7d4d355"
 }
