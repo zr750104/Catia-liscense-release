@@ -49,7 +49,7 @@
 | `config.json` | Settings | 設定ファイル |
 | `Start-CatiaIdleGuard.bat` | Normal start (no console, tray icon) | 通常起動用 (コンソール非表示・トレイ常駐) |
 | `Test-CatiaIdleGuard.bat` | Test start (1 min idle, 20 s warning, console visible) | 動作確認用 (無操作 1 分・警告 20 秒・コンソール表示) |
-| `Install-Startup.ps1` | Register/unregister auto-start at Windows sign-in | Windows サインイン時の自動起動を登録/解除 |
+| `Install-Startup.ps1` | Manual register/unregister of auto-start (for administrators) | 自動起動の手動登録/解除 (管理者向け) |
 | `docs/QuickGuide.html` | User guide and download page (EN / JA / TH switch) | 使い方ガイド兼ダウンロードページ (英日タイ切替) |
 | `docs/CatiaIdleGuard_QuickGuide.pdf` | One-page printable guide (EN / JA / TH) | 印刷用 1 枚ガイド (英日タイ併記) |
 | `tools/build_guide.py` | Embeds the tool files into the HTML guide | ツール一式を HTML ガイドに埋め込む |
@@ -59,18 +59,16 @@
 
 ## Setup / セットアップ
 
-1. **EN:** Copy this whole folder to the company PC, for example `C:\Tools\CatiaIdleGuard`.
-   **JP:** このフォルダ一式を会社 PC の任意の場所 (例: `C:\Tools\CatiaIdleGuard`) に置きます。
+1. **EN:** Right-click the ZIP, choose **Properties**, check **Unblock**, then **Extract All** to a folder such as `C:\Tools\CatiaIdleGuard`. Do not run files from inside the ZIP.
+   **JP:** ZIP を右クリックして **プロパティ** で **許可する** にチェックし、**すべて展開** で `C:\Tools\CatiaIdleGuard` などに展開します。ZIP の中から実行しないでください。
 2. **EN:** Edit `config.json` if needed.
    **JP:** `config.json` を必要に応じて編集します。
 3. **EN:** Double-click `Start-CatiaIdleGuard.bat`. A shield icon in the system tray means it is running.
    **JP:** `Start-CatiaIdleGuard.bat` をダブルクリックで起動します。タスクトレイに盾アイコンが出れば常駐中です。
-4. **EN:** To start it automatically at sign-in, run the following in PowerShell. Add `-Remove` to unregister.
-   **JP:** サインイン時に自動起動させる場合は、PowerShell で次を実行します。解除は `-Remove` を付けて実行します。
-
-```bat
-powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startup.ps1"
-```
+4. **EN:** Auto-start at sign-in is registered automatically by `Start-CatiaIdleGuard.bat` (a shortcut in the Startup folder; it is updated if the folder is moved). To turn it off, right-click the shield icon and uncheck **Start at sign-in**. The choice is saved as `AutoStartup` in `config.json`.
+   **JP:** サインイン時の自動起動は `Start-CatiaIdleGuard.bat` が自動で登録します (スタートアップフォルダのショートカット。フォルダを移動した場合は次回起動時に作り直します)。止める場合は盾アイコンを右クリックして **サインイン時に自動起動** のチェックを外します。設定は `config.json` の `AutoStartup` に保存されます。
+   - **EN:** `Install-Startup.ps1` is kept for administrators (register, or `-Remove` to unregister, from PowerShell).
+     **JP:** `Install-Startup.ps1` は管理者向けに残しています (PowerShell から登録、`-Remove` で解除)。
 
 ### Notes / 注意事項
 
@@ -100,6 +98,7 @@ powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startu
 | `QuitWithoutComAccess` | `false` | Quit even if COM is unavailable. `true` may lose unsaved work | COM 接続できない場合でも終了するか。`true` は未保存文書が失われる可能性あり |
 | `LogFolder` | `"logs"` | Log folder. Relative paths are from the script folder | ログ出力先 (相対パスはスクリプトのフォルダ基準) |
 | `LogRetentionDays` | `30` | Days to keep logs | ログの保持日数 |
+| `AutoStartup` | `true` | Register auto-start at sign-in when started with `Start-CatiaIdleGuard.bat`. Also changed by the tray menu | `Start-CatiaIdleGuard.bat` で起動したときにサインイン時の自動起動を登録する。トレイメニューでも切り替え可 |
 
 ---
 

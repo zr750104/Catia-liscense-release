@@ -60,7 +60,8 @@ param(
     [string]$ConfigPath,
     [double]$IdleMinutes,
     [int]$WarningSeconds,
-    [switch]$NoTray
+    [switch]$NoTray,
+    [switch]$RegisterStartup     # set by Start-CatiaIdleGuard.bat / 通常起動の bat が指定する
 )
 
 Set-StrictMode -Version 2.0
@@ -98,6 +99,7 @@ $script:DefaultConfig = [ordered]@{
     QuitWithoutComAccess  = $false      # Quit even if COM is unavailable (data may be lost) / COM 接続失敗時も終了するか (未保存データ消失の恐れ)
     LogFolder             = 'logs'      # Relative to the script folder / スクリプトフォルダからの相対パス
     LogRetentionDays      = 30
+    AutoStartup           = $true       # Register auto-start at sign-in when started normally / 通常起動時にサインイン時の自動起動を登録する
 }
 
 function Get-Config {
@@ -657,6 +659,69 @@ function Show-WarningDialog {
 }
 
 # ------------------------------------------------------------------
+# Auto-start at sign-in / サインイン時の自動起動
+#   EN: A shortcut to Start-CatiaIdleGuard.bat in the user's Startup folder. It is re-created if the
+#       tool folder was moved. Turned on/off from the tray menu; the choice is saved in config.json.
+#   JP: ユーザーのスタートアップフォルダに Start-CatiaIdleGuard.bat へのショートカットを置く。
+#       ツールのフォルダを移動した場合は作り直す。トレイメニューでオン/オフし、config.json に保存する。
+# ------------------------------------------------------------------
+function Get-StartupShortcutPath {
+    return (Join-Path ([Environment]::GetFolderPath('Startup')) 'CATIA Idle Guard.lnk')
+}
+
+function Test-AutoStartup {
+    return (Test-Path -LiteralPath (Get-StartupShortcutPath))
+}
+
+function Register-AutoStartup {
+    $bat = Join-Path $script:ScriptDir 'Start-CatiaIdleGuard.bat'
+    if (-not (Test-Path -LiteralPath $bat)) {
+        Write-Log -Level WARN -Message "Auto-start not registered: launcher not found / 自動起動を登録できません (起動用 bat が見つかりません): $bat"
+        return $false
+    }
+    $lnk = Get-StartupShortcutPath
+    $shell = New-Object -ComObject WScript.Shell
+    try {
+        if (Test-Path -LiteralPath $lnk) {
+            $current = $shell.CreateShortcut($lnk)
+            if ([string]$current.TargetPath -eq $bat) { return $true }   # already correct / 登録済み
+        }
+        $sc = $shell.CreateShortcut($lnk)
+        $sc.TargetPath = $bat
+        $sc.WorkingDirectory = $script:ScriptDir
+        $sc.WindowStyle = 7   # minimized / 最小化
+        $sc.Description = 'CATIA V5 Idle Guard'
+        $sc.Save()
+        Write-Log -Message "Auto-start at sign-in registered / サインイン時の自動起動を登録しました: $lnk -> $bat"
+        return $true
+    }
+    finally {
+        Remove-ComReference $shell
+    }
+}
+
+function Unregister-AutoStartup {
+    $lnk = Get-StartupShortcutPath
+    if (Test-Path -LiteralPath $lnk) {
+        Remove-Item -LiteralPath $lnk -Force
+        Write-Log -Message "Auto-start at sign-in removed / サインイン時の自動起動を解除しました: $lnk"
+    }
+}
+
+function Set-ConfigValue {
+    # Save one setting to config.json (other settings are kept) / config.json の 1 項目だけを書き換える
+    param([string]$Name, $Value)
+    $obj = $null
+    if (Test-Path -LiteralPath $script:ConfigPath) {
+        try { $obj = Get-Content -LiteralPath $script:ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $obj = $null }
+    }
+    if ($null -eq $obj) { $obj = New-Object PSObject }
+    $obj | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+    $obj | ConvertTo-Json | Set-Content -LiteralPath $script:ConfigPath -Encoding UTF8
+    $script:Config[$Name] = $Value
+}
+
+# ------------------------------------------------------------------
 # Tray icon / タスクトレイ
 # ------------------------------------------------------------------
 $script:Tray = $null
@@ -681,6 +746,26 @@ function Initialize-Tray {
         if (-not (Test-Path -LiteralPath $script:Config.BackupFolder)) { New-Item -ItemType Directory -Path $script:Config.BackupFolder -Force | Out-Null }
         Start-Process explorer.exe $script:Config.BackupFolder
     })
+    $itemAuto = New-Object System.Windows.Forms.ToolStripMenuItem('Start at sign-in / サインイン時に自動起動 / เริ่มอัตโนมัติเมื่อลงชื่อเข้าใช้')
+    $itemAuto.Checked = (Test-AutoStartup)
+    $itemAuto.Add_Click({
+        # $this = the clicked menu item / クリックされたメニュー項目
+        try {
+            if ($this.Checked) {
+                Unregister-AutoStartup
+                Set-ConfigValue -Name 'AutoStartup' -Value $false
+            }
+            else {
+                [void](Register-AutoStartup)
+                Set-ConfigValue -Name 'AutoStartup' -Value $true
+            }
+        }
+        catch {
+            Write-Log -Level ERROR -Message "Auto-start setting failed / 自動起動の設定に失敗: $($_.Exception.Message)"
+        }
+        $this.Checked = (Test-AutoStartup)
+    })
+    [void]$menu.Items.Add($itemAuto)
     [void]$menu.Items.Add('-')
     $itemExit = $menu.Items.Add('Exit Idle Guard / Idle Guard を終了 / ปิด Idle Guard')
     $itemExit.Add_Click({ $script:Running = $false })
@@ -716,6 +801,10 @@ $script:Running = $true
 Write-Log -Message ('CATIA Idle Guard started / 起動 (IdleMinutes={0}, WarningSeconds={1}, Process={2}, Backup={3})' -f `
     $script:Config.IdleMinutes, $script:Config.WarningSeconds, $script:Config.ProcessName, $script:Config.BackupFolder)
 Remove-OldLogs
+if ($RegisterStartup -and [bool]$script:Config.AutoStartup) {
+    try { [void](Register-AutoStartup) }
+    catch { Write-Log -Level WARN -Message "Auto-start registration failed / 自動起動の登録に失敗: $($_.Exception.Message)" }
+}
 Initialize-Tray
 
 $trackedPids = @()

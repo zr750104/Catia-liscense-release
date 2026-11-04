@@ -1,4 +1,5 @@
 @echo off
 rem CATIA Idle Guard launcher (Windows PowerShell 5.1, hidden window, tray icon)
+rem Also registers auto-start at sign-in (turn it off from the tray menu).
 rem Do not run as Administrator: COM connection to CATIA requires the same privilege level.
-start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "%~dp0CatiaIdleGuard.ps1" -ConfigPath "%~dp0config.json"
+start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "%~dp0CatiaIdleGuard.ps1" -ConfigPath "%~dp0config.json" -RegisterStartup

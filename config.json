@@ -7,5 +7,6 @@
   "ForceKillAfterSeconds": 90,
   "QuitWithoutComAccess": false,
   "LogFolder": "logs",
-  "LogRetentionDays": 30
+  "LogRetentionDays": 30,
+  "AutoStartup": true
 }
