@@ -146,8 +146,8 @@ powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startu
 
 - **EN:** A one-page user guide in English, Japanese and Thai is in `docs/CatiaIdleGuard_QuickGuide.pdf`. The source is `docs/guide.html`.
   **JP:** 利用者向けの 1 枚ものガイド (英語・日本語・タイ語) は `docs/CatiaIdleGuard_QuickGuide.pdf` にあります。元データは `docs/guide.html` です。
-- **EN:** An HTML version with a language switch (English / 日本語 / ไทย) is in `docs/QuickGuide.html`. Open it in a browser; it works offline. The chosen language is remembered, and you can link to a language with `#en`, `#ja` or `#th`.
-  **JP:** 言語を切り替えられる HTML 版 (English / 日本語 / ไทย) は `docs/QuickGuide.html` です。ブラウザで開くだけで、オフラインでも使えます。選んだ言語は記憶され、`#en` `#ja` `#th` を付けると最初からその言語で開きます。
+- **EN:** An HTML version with a language switch (English / 日本語 / ไทย) is in `docs/QuickGuide.html`. Open it in a browser; it works offline. It always opens in English; add `#ja` or `#th` to the address to open it in Japanese or Thai.
+  **JP:** 言語を切り替えられる HTML 版 (English / 日本語 / ไทย) は `docs/QuickGuide.html` です。ブラウザで開くだけで、オフラインでも使えます。開くと常に英語で表示されます。アドレスの末尾に `#ja` か `#th` を付けると、最初から日本語かタイ語で開きます。
 - **EN:** `docs/QuickGuide.html` is also the **download page**: the tool files are embedded in it as `CatiaIdleGuard.zip` and as individual files. To distribute the tool, send only this one HTML file. Users click the download button and follow the steps on the page.
   **JP:** `docs/QuickGuide.html` は **ダウンロードページ** を兼ねます。ツール一式が `CatiaIdleGuard.zip` と個別ファイルとして埋め込まれているので、配布はこの HTML 1 ファイルを送るだけです。利用者はダウンロードボタンを押し、ページの手順どおりに進めます。
 - **EN:** After changing any tool file, re-embed the files with the command below, then commit `docs/QuickGuide.html`.
