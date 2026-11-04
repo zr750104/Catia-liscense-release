@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CATIA Idle Guard Guide</title>
+<style>
+  :root {
+    --bg:#f5f7fa; --card:#ffffff; --ink:#1d2433; --sub:#5a6476; --line:#d9dfe8;
+    --accent:#0b5cad; --accent-ink:#ffffff; --accent-soft:#e8f1fb;
+    --ok:#1f8a4c; --ok-soft:#e9f7ee; --warn:#b4540a; --warn-soft:#fff3e6;
+    --code-bg:#eef1f5; --cmd-bg:#1d2433; --cmd-ink:#e8edf5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#12161d; --card:#1b212b; --ink:#e6eaf0; --sub:#a3adbd; --line:#2e3644;
+      --accent:#5aa2ef; --accent-ink:#0b1626; --accent-soft:#1a2b40;
+      --ok:#4cc27f; --ok-soft:#173025; --warn:#f0a35c; --warn-soft:#33240f;
+      --code-bg:#262e3a; --cmd-bg:#0b0f14; --cmd-ink:#dfe6ef;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#12161d; --card:#1b212b; --ink:#e6eaf0; --sub:#a3adbd; --line:#2e3644;
+    --accent:#5aa2ef; --accent-ink:#0b1626; --accent-soft:#1a2b40;
+    --ok:#4cc27f; --ok-soft:#173025; --warn:#f0a35c; --warn-soft:#33240f;
+    --code-bg:#262e3a; --cmd-bg:#0b0f14; --cmd-ink:#dfe6ef;
+  }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.6;
+         font-family:"Segoe UI","Helvetica Neue",Arial,"Meiryo UI","Yu Gothic UI","Leelawadee UI","Tahoma",sans-serif; }
+  html[lang="ja"] body { font-family:"Meiryo UI","Yu Gothic UI","Meiryo","Hiragino Sans","IPAPGothic","Segoe UI",sans-serif; }
+  html[lang="th"] body { font-family:"Leelawadee UI","Tahoma","Noto Sans Thai","Loma","Segoe UI",sans-serif; font-size:16px; }
+  .wrap { max-width:980px; margin:0 auto; padding:0 16px 40px; }
+
+  /* top bar */
+  .topbar { position:sticky; top:0; z-index:10; background:var(--card); border-bottom:1px solid var(--line); }
+  .topbar .wrap { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:10px; padding-bottom:10px; flex-wrap:wrap; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px; color:var(--accent); }
+  .brand svg { width:26px; height:26px; flex:none; }
+  .tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .langs { display:inline-flex; border:1px solid var(--line); border-radius:999px; padding:3px; background:var(--bg); }
+  .langs button { border:0; background:transparent; color:var(--ink); padding:6px 14px; border-radius:999px; cursor:pointer; font:inherit; font-size:14px; }
+  .langs button[data-l="ja"] { font-family:"Meiryo UI","Yu Gothic UI","Meiryo","IPAPGothic",sans-serif; }
+  .langs button[data-l="th"] { font-family:"Leelawadee UI","Tahoma","Loma",sans-serif; }
+  .langs button[aria-pressed="true"] { background:var(--accent); color:var(--accent-ink); font-weight:600; }
+  .langs button:focus-visible, .btn-plain:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .btn-plain { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:6px 12px; cursor:pointer; font:inherit; font-size:14px; }
+
+  /* hero */
+  .hero { margin:24px 0 18px; }
+  .hero h1 { margin:0 0 6px; font-size:28px; line-height:1.25; }
+  .hero p { margin:0; color:var(--sub); }
+  .lead { background:var(--accent-soft); border-radius:12px; padding:14px 18px; margin:16px 0 0; font-size:16px; }
+  .lead b { color:var(--accent); }
+
+  /* cards */
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:16px; }
+  .card h2 { margin:0 0 12px; font-size:19px; display:flex; align-items:center; gap:10px; }
+  .card h2 .num { display:inline-grid; place-items:center; width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-size:15px; flex:none; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grid > .card { margin-bottom:0; }
+  @media (max-width:820px) { .grid { grid-template-columns:1fr; } }
+
+  /* flow */
+  .flow { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; counter-reset:step; }
+  .step { position:relative; border:1px solid var(--line); border-radius:10px; padding:12px 10px; text-align:center; background:var(--bg); font-size:14px; }
+  .step::before { counter-increment:step; content:counter(step); display:block; width:26px; height:26px; line-height:26px; margin:0 auto 6px; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-weight:700; text-align:center; }
+  .step.last { background:var(--ok-soft); border-color:var(--ok); }
+  .step.last::before { background:var(--ok); }
+  .step:not(:last-child)::after { content:""; position:absolute; right:-9px; top:50%; border:5px solid transparent; border-left:7px solid var(--accent); transform:translateY(-50%); }
+  @media (max-width:820px) {
+    .flow { grid-template-columns:1fr; }
+    .step { text-align:left; display:flex; align-items:center; gap:10px; }
+    .step::before { margin:0; flex:none; }
+    .step:not(:last-child)::after { right:auto; left:22px; top:auto; bottom:-11px; border:5px solid transparent; border-top:7px solid var(--accent); transform:none; }
+  }
+  .note { margin:12px 0 0; color:var(--sub); font-size:14px; }
+
+  ol, ul { margin:0; padding-left:22px; }
+  li { margin-bottom:8px; }
+  code { font-family:Consolas,"DejaVu Sans Mono",monospace; background:var(--code-bg); border-radius:4px; padding:1px 5px; font-size:.9em; white-space:nowrap; }
+  @media (max-width:480px) { code { white-space:normal; word-break:break-all; } .cmd { flex-direction:column; } }
+  .cmd { display:flex; align-items:stretch; gap:8px; margin-top:8px; }
+  .cmd pre { flex:1; margin:0; background:var(--cmd-bg); color:var(--cmd-ink); border-radius:8px; padding:10px 12px; font-family:Consolas,"DejaVu Sans Mono",monospace; font-size:13px; white-space:pre-wrap; word-break:break-all; }
+  .cmd button { flex:none; }
+
+  /* dialog mock (shows the real, trilingual dialog) */
+  .dialog { border:1px solid #9aa6b8; border-radius:8px; overflow:hidden; margin:4px 0 14px; background:#fff; color:#1d2433; font-family:"Segoe UI","Meiryo UI","Leelawadee UI","IPAPGothic","Loma",sans-serif; font-size:13px; line-height:1.45; }
+  .dialog .bar { background:#e9edf3; padding:5px 10px; border-bottom:1px solid #c9d1dd; font-size:12px; }
+  .dialog .body { padding:10px 12px; }
+  .dialog .body p { margin:0 0 6px; }
+  .dialog .body .jp { color:#3f4859; font-family:"Meiryo UI","Yu Gothic UI","IPAPGothic",sans-serif; }
+  .dialog .body .th { color:#3f4859; font-family:"Leelawadee UI","Tahoma","Loma",sans-serif; }
+  .dialog .path { color:#6b7280; font-size:12px; }
+  .dialog .btns { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 12px 12px; }
+  .dialog .b { border:1px solid #8c98ab; border-radius:4px; background:#f4f6f9; text-align:center; padding:6px; line-height:1.3; }
+  .dialog .b.def { border:2px solid #0b5cad; }
+  .dialog .cap { text-align:center; font-family:"Leelawadee UI","Tahoma","Loma",sans-serif; margin-top:4px; }
+  .caption { color:var(--sub); font-size:13px; margin:-6px 0 12px; }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:8px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--sub); font-weight:600; font-size:13px; }
+  td:first-child { font-weight:600; width:42%; }
+
+  .warnbox { background:var(--warn-soft); border:1px solid var(--warn); border-left-width:5px; }
+  .warnbox h2 { color:var(--warn); }
+  footer { color:var(--sub); font-size:13px; text-align:center; margin-top:24px; }
+
+  @media print {
+    @page { size:A4; margin:12mm; }
+    .topbar .tools { display:none; }
+    .topbar { position:static; border:0; }
+    body { background:#fff; font-size:11pt; }
+    .card { break-inside:avoid; border-color:#ccc; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 2 3.5v4C2 11 4.6 14 8 15c3.4-1 6-4 6-7.5v-4z" fill="#0b5cad"/><path d="M8 2.6v10.9C5.5 12.6 3.6 10.3 3.6 7.6V4.6z" fill="#f2c94c"/></svg>
+      CATIA Idle Guard
+    </div>
+    <div class="tools">
+      <div class="langs" role="group" aria-label="Language">
+        <button type="button" data-l="en" aria-pressed="true">English</button>
+        <button type="button" data-l="ja" aria-pressed="false">日本語</button>
+        <button type="button" data-l="th" aria-pressed="false">ไทย</button>
+      </div>
+      <button type="button" class="btn-plain" id="printBtn" data-i18n="print">Print</button>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="hero">
+    <h1 data-i18n="title">Quick Guide</h1>
+    <p data-i18n="subtitle">For CATIA V5 users on Windows</p>
+    <div class="lead" data-i18n="lead">If you do not use CATIA for <b>15 minutes</b>, this tool <b>saves your unsaved work</b> to a backup folder and <b>closes CATIA</b>, so the license goes back to the server for other people.</div>
+  </div>
+
+  <section class="card">
+    <h2 data-i18n="how_h">How it works</h2>
+    <div class="flow">
+      <div class="step" data-i18n="s1">No input in CATIA for 15 min</div>
+      <div class="step" data-i18n="s2">Warning dialog, 60 s countdown</div>
+      <div class="step" data-i18n="s3">Unsaved files saved to backup folder</div>
+      <div class="step" data-i18n="s4">CATIA closes</div>
+      <div class="step last" data-i18n="s5">License returned</div>
+    </div>
+    <p class="note" data-i18n="how_note">Only input <b>in a CATIA window</b> counts. Working in Excel or Outlook does <b>not</b> stop the timer.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2><span class="num">1</span><span data-i18n="setup_h">First-time setup</span></h2>
+      <ol>
+        <li data-i18n="setup1">Copy the folder to your PC, e.g. <code>C:\Tools\CatiaIdleGuard</code></li>
+        <li data-i18n="setup2">Double-click <code>Start-CatiaIdleGuard.bat</code></li>
+        <li data-i18n="setup3">A <b>shield icon</b> appears in the system tray. It is now running.</li>
+        <li><span data-i18n="setup4">Auto-start at Windows sign-in (one time only). Run this in PowerShell:</span>
+          <div class="cmd">
+            <pre id="cmdText">powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startup.ps1"</pre>
+            <button type="button" class="btn-plain" id="copyBtn" data-i18n="copy">Copy</button>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2><span class="num">2</span><span data-i18n="warn_h">When the warning appears</span></h2>
+      <div class="dialog" aria-hidden="true">
+        <div class="bar">CATIA Idle Guard</div>
+        <div class="body">
+          <p>CATIA has not been used for 15 minutes.<br>In 60 seconds, unsaved documents will be backed up and CATIA will be closed to return the license.</p>
+          <p class="jp">15 分間 CATIA の操作がありません。<br>60 秒後に未保存の文書をバックアップ保存して CATIA を終了し、ライセンスを返却します。</p>
+          <p class="th">ไม่ได้ใช้งาน CATIA มาแล้ว 15 นาที<br>ในอีก 60 วินาที ระบบจะสำรองเอกสารที่ยังไม่ได้บันทึก และปิด CATIA เพื่อคืนไลเซนส์</p>
+          <p class="path">Backup folder / 保存先:<br>C:\Users\&lt;you&gt;\Documents\CATIA_AutoBackup</p>
+        </div>
+        <div class="btns">
+          <div><div class="b def">Continue working<br>作業を続行する</div><div class="cap">ทำงานต่อ</div></div>
+          <div><div class="b">Save and quit now<br>今すぐ保存して終了</div><div class="cap">บันทึกและปิดทันที</div></div>
+        </div>
+      </div>
+      <p class="caption" data-i18n="dlg_note">The real dialog always shows English, Japanese and Thai.</p>
+      <table>
+        <thead><tr><th data-i18n="col_action">What you do</th><th data-i18n="col_result">What happens</th></tr></thead>
+        <tbody>
+          <tr><td data-i18n="t_continue">Click "Continue working"</td><td data-i18n="t_continue_d">Keep using CATIA. The timer restarts.</td></tr>
+          <tr><td data-i18n="t_click">Click a CATIA window</td><td data-i18n="t_click_d">Same as "Continue working".</td></tr>
+          <tr><td data-i18n="t_quit">Click "Save and quit now"</td><td data-i18n="t_quit_d">Back up and close CATIA now.</td></tr>
+          <tr><td data-i18n="t_timeout">No answer for 60 s</td><td data-i18n="t_timeout_d">Back up and close CATIA.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2><span class="num">3</span><span data-i18n="rec_h">Get your unsaved work back</span></h2>
+      <ol>
+        <li data-i18n="rec1">Right-click the shield icon, then click <b>Open backup folder</b>.</li>
+        <li data-i18n="rec2">Open the folder named with the date and time, e.g. <code>20261104_153012</code></li>
+        <li data-i18n="rec3">Open the file in CATIA and use <b>File &gt; Save As</b> to save it to the original place.</li>
+      </ol>
+      <p class="note" data-i18n="rec_note"><b>Your original files are never overwritten.</b> Default folder: <code>Documents\CATIA_AutoBackup</code></p>
+    </section>
+
+    <section class="card">
+      <h2><span class="num">4</span><span data-i18n="tray_h">Tray menu (right-click the shield icon)</span></h2>
+      <table>
+        <thead><tr><th data-i18n="col_item">Menu</th><th data-i18n="col_desc">Use</th></tr></thead>
+        <tbody>
+          <tr><td data-i18n="m1">Status</td><td data-i18n="m1d">Time left before CATIA closes.</td></tr>
+          <tr><td data-i18n="m2">Open log folder</td><td data-i18n="m2d">Records of what happened.</td></tr>
+          <tr><td data-i18n="m3">Open backup folder</td><td data-i18n="m3d">Saved files.</td></tr>
+          <tr><td data-i18n="m4">Exit Idle Guard</td><td data-i18n="m4d">Stop the tool, for example before a long Update.</td></tr>
+        </tbody>
+      </table>
+      <p class="note" data-i18n="tray_note">Menu items are shown in English, Japanese and Thai.</p>
+    </section>
+  </div>
+
+  <section class="card warnbox" style="margin-top:16px">
+    <h2 data-i18n="imp_h">Important</h2>
+    <ul>
+      <li data-i18n="imp1"><b>A long Update or calculation</b> without mouse or keyboard input counts as idle. Exit Idle Guard from the tray first.</li>
+      <li data-i18n="imp2">Do <b>not</b> run it as Administrator.</li>
+      <li data-i18n="imp3">If a save fails, CATIA is <b>not</b> closed. Check the log.</li>
+      <li data-i18n="imp4">To change 15 min / 60 s, edit <code>IdleMinutes</code> / <code>WarningSeconds</code> in <code>config.json</code>, then restart the tool.</li>
+    </ul>
+  </section>
+
+  <footer data-i18n="footer">Details: README.md in the tool folder</footer>
+</main>
+
+<script>
+(function () {
+  var T = {
+    en: {
+      print: "Print",
+      title: "Quick Guide",
+      subtitle: "For CATIA V5 users on Windows",
+      lead: "If you do not use CATIA for <b>15 minutes</b>, this tool <b>saves your unsaved work</b> to a backup folder and <b>closes CATIA</b>, so the license goes back to the server for other people.",
+      how_h: "How it works",
+      s1: "No input in CATIA for 15 min", s2: "Warning dialog, 60 s countdown", s3: "Unsaved files saved to backup folder", s4: "CATIA closes", s5: "License returned",
+      how_note: "Only input <b>in a CATIA window</b> counts. Working in Excel or Outlook does <b>not</b> stop the timer.",
+      setup_h: "First-time setup",
+      setup1: "Copy the folder to your PC, e.g. <code>C:\\Tools\\CatiaIdleGuard</code>",
+      setup2: "Double-click <code>Start-CatiaIdleGuard.bat</code>",
+      setup3: "A <b>shield icon</b> appears in the system tray. It is now running.",
+      setup4: "Auto-start at Windows sign-in (one time only). Run this in PowerShell:",
+      copy: "Copy", copied: "Copied",
+      warn_h: "When the warning appears",
+      dlg_note: "The real dialog always shows English, Japanese and Thai.",
+      col_action: "What you do", col_result: "What happens",
+      t_continue: "Click \"Continue working\"", t_continue_d: "Keep using CATIA. The timer restarts.",
+      t_click: "Click a CATIA window", t_click_d: "Same as \"Continue working\".",
+      t_quit: "Click \"Save and quit now\"", t_quit_d: "Back up and close CATIA now.",
+      t_timeout: "No answer for 60 s", t_timeout_d: "Back up and close CATIA.",
+      rec_h: "Get your unsaved work back",
+      rec1: "Right-click the shield icon, then click <b>Open backup folder</b>.",
+      rec2: "Open the folder named with the date and time, e.g. <code>20261104_153012</code>",
+      rec3: "Open the file in CATIA and use <b>File &gt; Save As</b> to save it to the original place.",
+      rec_note: "<b>Your original files are never overwritten.</b> Default folder: <code>Documents\\CATIA_AutoBackup</code>",
+      tray_h: "Tray menu (right-click the shield icon)",
+      col_item: "Menu", col_desc: "Use",
+      m1: "Status", m1d: "Time left before CATIA closes.",
+      m2: "Open log folder", m2d: "Records of what happened.",
+      m3: "Open backup folder", m3d: "Saved files.",
+      m4: "Exit Idle Guard", m4d: "Stop the tool, for example before a long Update.",
+      tray_note: "Menu items are shown in English, Japanese and Thai.",
+      imp_h: "Important",
+      imp1: "<b>A long Update or calculation</b> without mouse or keyboard input counts as idle. Exit Idle Guard from the tray first.",
+      imp2: "Do <b>not</b> run it as Administrator.",
+      imp3: "If a save fails, CATIA is <b>not</b> closed. Check the log.",
+      imp4: "To change 15 min / 60 s, edit <code>IdleMinutes</code> / <code>WarningSeconds</code> in <code>config.json</code>, then restart the tool.",
+      footer: "Details: README.md in the tool folder"
+    },
+    ja: {
+      print: "印刷",
+      title: "使い方ガイド",
+      subtitle: "Windows で CATIA V5 を使う方向け",
+      lead: "CATIA を <b>15 分間</b>操作しないと、<b>未保存のデータをバックアップ保存</b>してから <b>CATIA を終了</b>し、ライセンスをサーバへ返却します。他の人がライセンスを使えるようになります。",
+      how_h: "動作の流れ",
+      s1: "CATIA 操作なし 15 分", s2: "警告ダイアログ 60 秒カウントダウン", s3: "未保存ファイルをバックアップ保存", s4: "CATIA 終了", s5: "ライセンス返却",
+      how_note: "<b>CATIA のウィンドウ</b>での操作だけを数えます。Excel や Outlook を使っていてもタイマーは<b>止まりません</b>。",
+      setup_h: "初回セットアップ",
+      setup1: "フォルダを PC にコピーします (例: <code>C:\\Tools\\CatiaIdleGuard</code>)",
+      setup2: "<code>Start-CatiaIdleGuard.bat</code> をダブルクリックします",
+      setup3: "タスクトレイに<b>盾アイコン</b>が出れば起動完了です。",
+      setup4: "サインイン時に自動起動する設定 (1 回だけ)。PowerShell で次を実行します:",
+      copy: "コピー", copied: "コピーしました",
+      warn_h: "警告が出たら",
+      dlg_note: "実際のダイアログは常に英語・日本語・タイ語で表示されます。",
+      col_action: "操作", col_result: "結果",
+      t_continue: "「作業を続行する」を押す", t_continue_d: "作業を続けます。タイマーがリセットされます。",
+      t_click: "CATIA のウィンドウをクリック", t_click_d: "「作業を続行する」と同じです。",
+      t_quit: "「今すぐ保存して終了」を押す", t_quit_d: "すぐにバックアップして CATIA を終了します。",
+      t_timeout: "60 秒間 応答なし", t_timeout_d: "バックアップして CATIA を終了します。",
+      rec_h: "未保存データの戻し方",
+      rec1: "盾アイコンを右クリックし、<b>バックアップフォルダを開く</b>を選びます。",
+      rec2: "日時の名前のフォルダを開きます (例: <code>20261104_153012</code>)",
+      rec3: "CATIA でファイルを開き、<b>ファイル &gt; 名前を付けて保存</b>で元の場所へ保存します。",
+      rec_note: "<b>元のファイルは上書きされません。</b>既定の保存先: <code>Documents\\CATIA_AutoBackup</code>",
+      tray_h: "トレイメニュー (盾アイコンを右クリック)",
+      col_item: "メニュー", col_desc: "用途",
+      m1: "状態", m1d: "CATIA 終了までの残り時間",
+      m2: "ログフォルダを開く", m2d: "動作の記録",
+      m3: "バックアップフォルダを開く", m3d: "保存されたファイル",
+      m4: "Idle Guard を終了", m4d: "ツールを停止します (長時間の更新の前など)。",
+      tray_note: "メニューは英語・日本語・タイ語で表示されます。",
+      imp_h: "注意",
+      imp1: "マウス・キー入力の無い<b>長時間の更新や計算</b>も無操作扱いです。先にトレイから Idle Guard を終了してください。",
+      imp2: "<b>管理者として実行しないでください。</b>",
+      imp3: "保存に失敗した場合は CATIA を<b>終了しません</b>。ログを確認してください。",
+      imp4: "15 分 / 60 秒は <code>config.json</code> の <code>IdleMinutes</code> / <code>WarningSeconds</code> で変更し、ツールを再起動します。",
+      footer: "詳細はツールフォルダ内の README.md を参照"
+    },
+    th: {
+      print: "พิมพ์",
+      title: "คู่มือการใช้งาน",
+      subtitle: "สำหรับผู้ใช้ CATIA V5 บน Windows",
+      lead: "หากไม่ได้ใช้งาน CATIA เป็นเวลา <b>15 นาที</b> โปรแกรมนี้จะ<b>บันทึกงานที่ยังไม่ได้บันทึก</b>ไว้ในโฟลเดอร์สำรองข้อมูล แล้ว<b>ปิด CATIA</b> เพื่อคืนไลเซนส์ให้เซิร์ฟเวอร์ ผู้อื่นจึงสามารถใช้ไลเซนส์ได้",
+      how_h: "ขั้นตอนการทำงาน",
+      s1: "ไม่มีการใช้งาน CATIA 15 นาที", s2: "หน้าต่างคำเตือน นับถอยหลัง 60 วินาที", s3: "สำรองไฟล์ที่ยังไม่ได้บันทึก", s4: "ปิด CATIA", s5: "คืนไลเซนส์",
+      how_note: "นับเฉพาะการใช้งานใน<b>หน้าต่าง CATIA</b> เท่านั้น การใช้ Excel หรือ Outlook จะ<b>ไม่</b>หยุดการนับเวลา",
+      setup_h: "การตั้งค่าครั้งแรก",
+      setup1: "คัดลอกโฟลเดอร์ไปยังเครื่อง PC เช่น <code>C:\\Tools\\CatiaIdleGuard</code>",
+      setup2: "ดับเบิลคลิก <code>Start-CatiaIdleGuard.bat</code>",
+      setup3: "เมื่อ<b>ไอคอนรูปโล่</b>ปรากฏในถาดระบบ (System tray) แสดงว่าโปรแกรมทำงานแล้ว",
+      setup4: "ตั้งค่าให้เริ่มอัตโนมัติเมื่อลงชื่อเข้าใช้ Windows (ทำครั้งเดียว) ให้รันคำสั่งนี้ใน PowerShell:",
+      copy: "คัดลอก", copied: "คัดลอกแล้ว",
+      warn_h: "เมื่อมีคำเตือนแสดงขึ้น",
+      dlg_note: "หน้าต่างจริงจะแสดงเป็นภาษาอังกฤษ ญี่ปุ่น และไทยเสมอ",
+      col_action: "สิ่งที่ทำ", col_result: "ผลลัพธ์",
+      t_continue: "คลิก \"ทำงานต่อ\"", t_continue_d: "ใช้งาน CATIA ต่อ ตัวจับเวลาจะเริ่มใหม่",
+      t_click: "คลิกหน้าต่าง CATIA", t_click_d: "เหมือนกับ \"ทำงานต่อ\"",
+      t_quit: "คลิก \"บันทึกและปิดทันที\"", t_quit_d: "สำรองข้อมูลและปิด CATIA ทันที",
+      t_timeout: "ไม่ตอบสนองภายใน 60 วินาที", t_timeout_d: "สำรองข้อมูลและปิด CATIA",
+      rec_h: "การกู้คืนงานที่ยังไม่ได้บันทึก",
+      rec1: "คลิกขวาที่ไอคอนรูปโล่ แล้วคลิก <b>เปิดโฟลเดอร์สำรองข้อมูล</b>",
+      rec2: "เปิดโฟลเดอร์ที่ตั้งชื่อตามวันที่และเวลา เช่น <code>20261104_153012</code>",
+      rec3: "เปิดไฟล์ใน CATIA แล้วใช้ <b>File &gt; Save As</b> เพื่อบันทึกกลับไปยังตำแหน่งเดิม",
+      rec_note: "<b>ไฟล์ต้นฉบับจะไม่ถูกเขียนทับ</b> โฟลเดอร์เริ่มต้น: <code>Documents\\CATIA_AutoBackup</code>",
+      tray_h: "เมนูในถาดระบบ (คลิกขวาที่ไอคอนรูปโล่)",
+      col_item: "เมนู", col_desc: "การใช้งาน",
+      m1: "สถานะ", m1d: "เวลาที่เหลือก่อนปิด CATIA",
+      m2: "เปิดโฟลเดอร์ Log", m2d: "บันทึกการทำงานของโปรแกรม",
+      m3: "เปิดโฟลเดอร์สำรองข้อมูล", m3d: "ไฟล์ที่สำรองไว้",
+      m4: "ปิด Idle Guard", m4d: "หยุดโปรแกรม เช่น ก่อน Update ที่ใช้เวลานาน",
+      tray_note: "เมนูจะแสดงเป็นภาษาอังกฤษ ญี่ปุ่น และไทย",
+      imp_h: "ข้อควรระวัง",
+      imp1: "<b>การ Update หรือการคำนวณที่ใช้เวลานาน</b>โดยไม่ใช้เมาส์หรือคีย์บอร์ด จะนับเป็นการไม่ใช้งาน ให้ปิด Idle Guard จากถาดระบบก่อน",
+      imp2: "<b>ห้าม</b>เรียกใช้ในฐานะผู้ดูแลระบบ (Administrator)",
+      imp3: "หากบันทึกไม่สำเร็จ จะ<b>ไม่</b>ปิด CATIA กรุณาตรวจสอบ Log",
+      imp4: "หากต้องการเปลี่ยน 15 นาที / 60 วินาที ให้แก้ไข <code>IdleMinutes</code> / <code>WarningSeconds</code> ใน <code>config.json</code> แล้วเริ่มโปรแกรมใหม่",
+      footer: "รายละเอียด: README.md ในโฟลเดอร์ของโปรแกรม"
+    }
+  };
+  var KEY = "catiaIdleGuardGuideLang";
+  var current = "en";
+
+  function apply(lang) {
+    if (!T[lang]) lang = "en";
+    current = lang;
+    var dict = T[lang];
+    document.documentElement.lang = lang;
+    var nodes = document.querySelectorAll("[data-i18n]");
+    for (var i = 0; i < nodes.length; i++) {
+      var k = nodes[i].getAttribute("data-i18n");
+      if (dict[k] !== undefined) nodes[i].innerHTML = dict[k];
+    }
+    var btns = document.querySelectorAll(".langs button");
+    for (var j = 0; j < btns.length; j++) {
+      btns[j].setAttribute("aria-pressed", btns[j].getAttribute("data-l") === lang ? "true" : "false");
+    }
+    document.title = "CATIA Idle Guard - " + dict.title;
+    try { localStorage.setItem(KEY, lang); } catch (e) {}
+    try { history.replaceState(null, "", "#" + lang); } catch (e) {}
+  }
+
+  function initialLang() {
+    var h = (location.hash || "").replace("#", "");
+    if (T[h]) return h;
+    try { var s = localStorage.getItem(KEY); if (T[s]) return s; } catch (e) {}
+    var n = (navigator.language || "en").toLowerCase();
+    if (n.indexOf("th") === 0) return "th";
+    if (n.indexOf("ja") === 0) return "ja";
+    return "en";
+  }
+
+  var langBtns = document.querySelectorAll(".langs button");
+  for (var i = 0; i < langBtns.length; i++) {
+    langBtns[i].addEventListener("click", function () { apply(this.getAttribute("data-l")); });
+  }
+
+  document.getElementById("printBtn").addEventListener("click", function () { window.print(); });
+
+  document.getElementById("copyBtn").addEventListener("click", function () {
+    var btn = this;
+    var text = document.getElementById("cmdText").textContent;
+    function done() {
+      btn.textContent = T[current].copied;
+      setTimeout(function () { btn.textContent = T[current].copy; }, 1500);
+    }
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+  });
+
+  apply(initialLang());
+})();
+</script>
+</body>
+</html>

@@ -143,3 +143,5 @@ powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startu
 
 - **EN:** A one-page user guide in English, Japanese and Thai is in `docs/CatiaIdleGuard_QuickGuide.pdf`. The source is `docs/guide.html`.
   **JP:** 利用者向けの 1 枚ものガイド (英語・日本語・タイ語) は `docs/CatiaIdleGuard_QuickGuide.pdf` にあります。元データは `docs/guide.html` です。
+- **EN:** An HTML version with a language switch (English / 日本語 / ไทย) is in `docs/QuickGuide.html`. Open it in a browser; it works offline. The chosen language is remembered, and you can link to a language with `#en`, `#ja` or `#th`.
+  **JP:** 言語を切り替えられる HTML 版 (English / 日本語 / ไทย) は `docs/QuickGuide.html` です。ブラウザで開くだけで、オフラインでも使えます。選んだ言語は記憶され、`#en` `#ja` `#th` を付けると最初からその言語で開きます。
