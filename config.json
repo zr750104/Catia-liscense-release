@@ -1,0 +1,11 @@
+{
+  "IdleMinutes": 15,
+  "WarningSeconds": 60,
+  "PollSeconds": 1,
+  "ProcessName": "CNEXT",
+  "BackupFolder": "%USERPROFILE%\\Documents\\CATIA_AutoBackup",
+  "ForceKillAfterSeconds": 90,
+  "QuitWithoutComAccess": false,
+  "LogFolder": "logs",
+  "LogRetentionDays": 30
+}
