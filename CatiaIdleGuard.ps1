@@ -242,7 +242,9 @@ $script:ThaiFont = Get-ThaiFontName
 # CATIA プロセス / 入力監視
 # ------------------------------------------------------------------
 function Get-CatiaProcesses {
-    @(Get-Process -Name $script:Config.ProcessName -ErrorAction SilentlyContinue)
+    # Always return an array, also for 0 or 1 process (unary comma stops PowerShell unrolling it)
+    # 0 件・1 件でも必ず配列で返す (カンマ演算子で PowerShell の展開を防ぐ)
+    return ,@(Get-Process -Name $script:Config.ProcessName -ErrorAction SilentlyContinue)
 }
 
 function Test-CatiaForeground {
@@ -372,8 +374,22 @@ function Backup-UnsavedDocuments {
         $name = [string](Get-ComProperty $doc 'Name')
         # CATIA keeps hidden feature catalogs (*.CATfct) open in the background; they are not user documents
         # CATIA は *.CATfct (フィーチャーカタログ) を裏で開いたままにする。利用者の文書ではないので対象外
-        if ($name -like '*.CATfct') { continue }
-        if (-not [bool](Get-ComProperty $doc 'Saved')) {
+        if ($name -like '*.CATfct') {
+            Write-Log -Message "  Document $i : $name (feature catalog, skipped / カタログのため対象外)"
+            continue
+        }
+        $saved = [bool](Get-ComProperty $doc 'Saved')
+        $path = ''
+        try { $path = [string](Get-ComProperty $doc 'Path') }
+        catch {
+            try { $path = [string](Split-Path -Parent ([string](Get-ComProperty $doc 'FullName'))) } catch { $path = '' }
+        }
+        # A new document that was never written to disk can report Saved=True; back it up as well
+        # 一度もディスクに保存していない新規文書は Saved=True を返すことがあるため、これもバックアップ対象にする
+        $neverSaved = [string]::IsNullOrEmpty($path)
+        $needBackup = (-not $saved) -or $neverSaved
+        Write-Log -Message ("  Document {0} : {1}  Saved={2}  Path='{3}'  -> {4}" -f $i, $name, $saved, $path, $(if ($needBackup) { 'backup / バックアップ' } else { 'no change / 変更なし' }))
+        if ($needBackup) {
             [void]$unsaved.Add(@{ Doc = $doc; Name = $name })
         }
     }
@@ -710,75 +726,86 @@ $pollMs = [Math]::Max(200, [int]([double]$script:Config.PollSeconds * 1000))
 
 try {
     while ($script:Running) {
-        $procs = Get-CatiaProcesses
-        $pids = @($procs | ForEach-Object { [int]$_.Id })
+        try {
+            $procs = Get-CatiaProcesses
+            $pids = @($procs | ForEach-Object { [int]$_.Id })
 
-        if ($pids.Count -eq 0) {
-            if ($trackedPids.Count -gt 0) {
-                Write-Log -Message 'CATIA exit detected. Back to standby. / CATIA の終了を検出しました。監視を待機状態に戻します。'
-                $trackedPids = @()
-            }
-            Set-TrayStatus 'CATIA not running (standby)' 'CATIA 未起動 (待機中)' 'CATIA ไม่ได้เปิดอยู่ (รอ)'
-            Wait-Poll -Milliseconds $pollMs
-            continue
-        }
-
-        # New CATIA session detected -> treat startup as activity / 新しい CATIA セッションを検出 -> 起動直後を活動とみなす
-        $newPids = @($pids | Where-Object { $trackedPids -notcontains $_ })
-        if ($newPids.Count -gt 0) {
-            Write-Log -Message "CATIA detected, monitoring started / CATIA を検出、監視を開始します (PID: $($newPids -join ', '))"
-            $lastActivity = Get-Date
-        }
-        $trackedPids = $pids
-
-        # Input detection: last-input time advanced AND CATIA is in the foreground = CATIA activity
-        # 入力検出: 最終入力時刻が進んでいて、かつ前面が CATIA なら CATIA 操作
-        $tick = [CatiaIdleGuard.Native]::GetLastInputTick()
-        if ($tick -ne $lastInputTick) {
-            $lastInputTick = $tick
-            if (Test-CatiaForeground -CatiaPids $pids) {
-                $lastActivity = Get-Date
-            }
-        }
-
-        $idle = (Get-Date) - $lastActivity
-        $remain = $idleLimit - $idle
-        if ($remain.TotalSeconds -gt 0) {
-            $r = '{0:mm\:ss}' -f $remain
-            Set-TrayStatus "Monitoring - quit in $r" "監視中 - 終了まで $r" "กำลังตรวจสอบ - ปิดในอีก $r"
-        }
-        else {
-            Write-Log -Message ('No CATIA activity for {0:F1} min. Showing warning dialog. / {0:F1} 分間 CATIA 操作なし。警告ダイアログを表示します。' -f $idle.TotalMinutes)
-            Set-TrayStatus 'Warning shown' '警告表示中' 'กำลังแสดงคำเตือน'
-            $answer = Show-WarningDialog -Seconds ([int]$script:Config.WarningSeconds) -CatiaPids $pids
-            Write-Log -Message "Warning dialog result / 警告ダイアログの結果: $answer"
-
-            if ($answer -eq 'Continue') {
-                $lastActivity = Get-Date
-                $lastInputTick = [CatiaIdleGuard.Native]::GetLastInputTick()
-            }
-            else {
-                Set-TrayStatus 'Closing CATIA' 'CATIA 終了処理中' 'กำลังปิด CATIA'
-                $ok = Stop-CatiaSafely
-                if ($ok) {
-                    # Keep one short line per language so all three fit / 3 言語が収まるよう各言語 1 行に短くする
-                    Show-Balloon -Title 'CATIA Idle Guard' -Text ("CATIA closed. License returned.`n" +
-                        "CATIA を終了し、ライセンスを返却`n" +
-                        'ปิด CATIA และคืนไลเซนส์แล้ว')
+            if ($pids.Count -eq 0) {
+                if ($trackedPids.Count -gt 0) {
+                    Write-Log -Message 'CATIA exit detected. Back to standby. / CATIA の終了を検出しました。監視を待機状態に戻します。'
                     $trackedPids = @()
                 }
-                else {
-                    Show-Balloon -Title 'CATIA Idle Guard' -Text ("CATIA not closed. See the log.`n" +
-                        "CATIA を終了できません。ログ参照`n" +
-                        'ปิด CATIA ไม่ได้ กรุณาดู Log')
-                    # Grace period so the warning does not repeat immediately / 連続して警告を出し続けないよう、再判定までの猶予を設ける
+                Set-TrayStatus 'CATIA not running (standby)' 'CATIA 未起動 (待機中)' 'CATIA ไม่ได้เปิดอยู่ (รอ)'
+                Wait-Poll -Milliseconds $pollMs
+                continue
+            }
+
+            # New CATIA session detected -> treat startup as activity / 新しい CATIA セッションを検出 -> 起動直後を活動とみなす
+            $newPids = @($pids | Where-Object { $trackedPids -notcontains $_ })
+            if ($newPids.Count -gt 0) {
+                Write-Log -Message "CATIA detected, monitoring started / CATIA を検出、監視を開始します (PID: $($newPids -join ', '))"
+                $lastActivity = Get-Date
+            }
+            $trackedPids = $pids
+
+            # Input detection: last-input time advanced AND CATIA is in the foreground = CATIA activity
+            # 入力検出: 最終入力時刻が進んでいて、かつ前面が CATIA なら CATIA 操作
+            $tick = [CatiaIdleGuard.Native]::GetLastInputTick()
+            if ($tick -ne $lastInputTick) {
+                $lastInputTick = $tick
+                if (Test-CatiaForeground -CatiaPids $pids) {
                     $lastActivity = Get-Date
                 }
             }
+
+            $idle = (Get-Date) - $lastActivity
+            $remain = $idleLimit - $idle
+            if ($remain.TotalSeconds -gt 0) {
+                $r = '{0:mm\:ss}' -f $remain
+                Set-TrayStatus "Monitoring - quit in $r" "監視中 - 終了まで $r" "กำลังตรวจสอบ - ปิดในอีก $r"
+            }
+            else {
+                Write-Log -Message ('No CATIA activity for {0:F1} min. Showing warning dialog. / {0:F1} 分間 CATIA 操作なし。警告ダイアログを表示します。' -f $idle.TotalMinutes)
+                Set-TrayStatus 'Warning shown' '警告表示中' 'กำลังแสดงคำเตือน'
+                $answer = Show-WarningDialog -Seconds ([int]$script:Config.WarningSeconds) -CatiaPids $pids
+                Write-Log -Message "Warning dialog result / 警告ダイアログの結果: $answer"
+
+                if ($answer -eq 'Continue') {
+                    $lastActivity = Get-Date
+                    $lastInputTick = [CatiaIdleGuard.Native]::GetLastInputTick()
+                }
+                else {
+                    Set-TrayStatus 'Closing CATIA' 'CATIA 終了処理中' 'กำลังปิด CATIA'
+                    $ok = Stop-CatiaSafely
+                    if ($ok) {
+                        # Keep one short line per language so all three fit / 3 言語が収まるよう各言語 1 行に短くする
+                        Show-Balloon -Title 'CATIA Idle Guard' -Text ("CATIA closed. License returned.`n" +
+                            "CATIA を終了し、ライセンスを返却`n" +
+                            'ปิด CATIA และคืนไลเซนส์แล้ว')
+                        $trackedPids = @()
+                    }
+                    else {
+                        Show-Balloon -Title 'CATIA Idle Guard' -Text ("CATIA not closed. See the log.`n" +
+                            "CATIA を終了できません。ログ参照`n" +
+                            'ปิด CATIA ไม่ได้ กรุณาดู Log')
+                        # Grace period so the warning does not repeat immediately / 連続して警告を出し続けないよう、再判定までの猶予を設ける
+                        $lastActivity = Get-Date
+                    }
+                }
+            }
+        }
+        catch {
+            # Keep running: log the error and wait before the next idle check
+            # 終了せずに動き続ける: エラーを記録し、次の判定まで猶予を置く
+            Write-Log -Level ERROR -Message "Unexpected error (continuing) / 予期しないエラー (動作は継続): $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"
+            $lastActivity = Get-Date
         }
 
         Wait-Poll -Milliseconds $pollMs
     }
+}
+catch {
+    Write-Log -Level ERROR -Message "Fatal error / 致命的なエラー: $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"
 }
 finally {
     if ($null -ne $script:Tray) {
