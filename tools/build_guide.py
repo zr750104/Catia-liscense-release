@@ -24,6 +24,7 @@ FILES = [
     ('Start-CatiaIdleGuard.bat',           'Start-CatiaIdleGuard.bat',      'f_start',  True),
     ('Test-CatiaIdleGuard.bat',            'Test-CatiaIdleGuard.bat',       'f_test',   True),
     ('Install-Startup.ps1',                'Install-Startup.ps1',           'f_inst',   True),
+    ('Install-AllUsers.ps1',               'Install-AllUsers.ps1',          'f_admin',  True),
     ('README.md',                          'README.md',                     'f_readme', True),
     ('docs/CatiaIdleGuard_QuickGuide.pdf', 'CatiaIdleGuard_QuickGuide.pdf', 'f_pdf',    False),
 ]

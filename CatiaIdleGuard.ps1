@@ -100,6 +100,7 @@ $script:DefaultConfig = [ordered]@{
     LogFolder             = 'logs'      # Relative to the script folder / スクリプトフォルダからの相対パス
     LogRetentionDays      = 30
     AutoStartup           = $true       # Register auto-start at sign-in when started normally / 通常起動時にサインイン時の自動起動を登録する
+    ManagedInstall        = $false      # Set by Install-AllUsers.ps1 (all-users install by an administrator) / 管理者による全ユーザー向けインストール時に true
     # SHA-256 of "CatiaIdleGuard:" + password. Empty = no password. See README to change it.
     # "CatiaIdleGuard:" + パスワード の SHA-256。空ならパスワードなし。変更方法は README を参照。
     ExitPasswordHash      = '09051bb0e9234daaf296e3f915794e6a3655c9236370bfd92fb4a8f4b7d4d355'
@@ -121,6 +122,7 @@ function Get-Config {
         }
     }
     $cfg.BackupFolder = [Environment]::ExpandEnvironmentVariables([string]$cfg.BackupFolder)
+    $cfg.LogFolder = [Environment]::ExpandEnvironmentVariables([string]$cfg.LogFolder)
     if (-not [IO.Path]::IsPathRooted([string]$cfg.LogFolder)) {
         $cfg.LogFolder = Join-Path $script:ScriptDir ([string]$cfg.LogFolder)
     }
@@ -201,6 +203,35 @@ public static uint GetForegroundProcessId() {
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+
+# ------------------------------------------------------------------
+# All-users install by an administrator / 管理者による全ユーザー向けインストール
+#   EN: Install-AllUsers.ps1 registers HKLM\...\Run\CATIA Idle Guard. If it exists, a per-user copy
+#       (e.g. in Downloads) steps aside: it removes its own Startup shortcut and exits.
+#   JP: Install-AllUsers.ps1 が HKLM\...\Run\CATIA Idle Guard を登録する。これがある場合、
+#       ユーザー単位のコピー (ダウンロードフォルダなど) は自分のスタートアップを外して終了する。
+# ------------------------------------------------------------------
+$script:RunKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+$script:RunValueName = 'CATIA Idle Guard'
+function Test-ManagedInstallPresent {
+    try { [void](Get-ItemProperty -Path $script:RunKey -Name $script:RunValueName -ErrorAction Stop); return $true }
+    catch { return $false }
+}
+
+if (-not [bool]$script:Config.ManagedInstall -and (Test-ManagedInstallPresent)) {
+    Write-Log -Level WARN -Message 'Installed for all users by an administrator. This per-user copy exits. / 管理者が全ユーザー向けにインストール済みのため、このコピーは終了します。'
+    try {
+        $userLnk = Join-Path ([Environment]::GetFolderPath('Startup')) 'CATIA Idle Guard.lnk'
+        if (Test-Path -LiteralPath $userLnk) { Remove-Item -LiteralPath $userLnk -Force }
+    }
+    catch { }
+    [void][System.Windows.Forms.MessageBox]::Show(
+        ("CATIA Idle Guard is installed for all users by your administrator. This copy is not used.`r`n`r`n" +
+         "CATIA Idle Guard は管理者により全ユーザー向けにインストールされています。このコピーは使用しません。`r`n`r`n" +
+         "CATIA Idle Guard ถูกติดตั้งสำหรับผู้ใช้ทุกคนโดยผู้ดูแลระบบแล้ว สำเนานี้จะไม่ถูกใช้งาน"),
+        'CATIA Idle Guard', 'OK', 'Information')
+    exit 0
+}
 
 # ------------------------------------------------------------------
 # Single instance / 多重起動の防止
@@ -805,6 +836,32 @@ function Unregister-AutoStartup {
     }
 }
 
+function Repair-AutoStartup {
+    # EN: While running, undo a removal or a Task Manager "Disable" of the per-user auto-start.
+    #     The only intended way to turn it off is the password-protected tray menu.
+    # JP: 動作中に、スタートアップの削除やタスクマネージャーでの「無効化」を元に戻す。
+    #     正式に止める方法は、パスワード付きのトレイメニューだけとする。
+    if ([bool]$script:Config.ManagedInstall -or -not [bool]$script:Config.AutoStartup) { return }
+    $lnk = Get-StartupShortcutPath
+    $existed = Test-Path -LiteralPath $lnk
+    [void](Register-AutoStartup)
+    if (-not $existed -and (Test-Path -LiteralPath $lnk)) {
+        Write-Log -Level WARN -Message 'Auto-start shortcut was removed and has been restored / 自動起動のショートカットが削除されていたため復元しました'
+    }
+    # Task Manager stores "Disabled" here (first byte 0x02 = enabled). Removing the value re-enables it.
+    # タスクマネージャーの「無効」はここに記録される (先頭バイト 0x02 = 有効)。値を消すと有効に戻る。
+    $approvedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder'
+    try {
+        $item = Get-ItemProperty -Path $approvedKey -Name 'CATIA Idle Guard.lnk' -ErrorAction Stop
+        $bytes = [byte[]]$item.'CATIA Idle Guard.lnk'
+        if ($null -ne $bytes -and $bytes.Length -gt 0 -and $bytes[0] -ne 2) {
+            Remove-ItemProperty -Path $approvedKey -Name 'CATIA Idle Guard.lnk' -ErrorAction Stop
+            Write-Log -Level WARN -Message 'Auto-start was disabled in Task Manager and has been re-enabled / タスクマネージャーで無効にされていた自動起動を有効に戻しました'
+        }
+    }
+    catch { }   # no value = enabled / 値が無ければ有効
+}
+
 function Set-ConfigValue {
     # Save one setting to config.json (other settings are kept) / config.json の 1 項目だけを書き換える
     param([string]$Name, $Value)
@@ -845,6 +902,11 @@ function Initialize-Tray {
     })
     $itemAuto = New-Object System.Windows.Forms.ToolStripMenuItem('Start at sign-in / サインイン時に自動起動 / เริ่มอัตโนมัติเมื่อลงชื่อเข้าใช้')
     $itemAuto.Checked = (Test-AutoStartup)
+    if ([bool]$script:Config.ManagedInstall) {
+        $itemAuto.Text = 'Start at sign-in (set by administrator) / サインイン時に自動起動 (管理者設定) / เริ่มอัตโนมัติ (ตั้งค่าโดยผู้ดูแลระบบ)'
+        $itemAuto.Checked = $true
+        $itemAuto.Enabled = $false
+    }
     $itemAuto.Add_Click({
         # $this = the clicked menu item / クリックされたメニュー項目
         if (-not (Confirm-Password -Action 'autostart')) { return }
@@ -904,7 +966,11 @@ $script:Running = $true
 Write-Log -Message ('CATIA Idle Guard started / 起動 (IdleMinutes={0}, WarningSeconds={1}, Process={2}, Backup={3})' -f `
     $script:Config.IdleMinutes, $script:Config.WarningSeconds, $script:Config.ProcessName, $script:Config.BackupFolder)
 Remove-OldLogs
-if ($RegisterStartup -and [bool]$script:Config.AutoStartup) {
+if ([bool]$script:Config.ManagedInstall) {
+    # Auto-start comes from HKLM Run; remove a leftover per-user shortcut / 自動起動は HKLM Run が担当。ユーザー単位の残りを外す
+    try { Unregister-AutoStartup } catch { }
+}
+elseif ($RegisterStartup -and [bool]$script:Config.AutoStartup) {
     try { [void](Register-AutoStartup) }
     catch { Write-Log -Level WARN -Message "Auto-start registration failed / 自動起動の登録に失敗: $($_.Exception.Message)" }
 }
@@ -915,10 +981,17 @@ $lastActivity = Get-Date
 $lastInputTick = [CatiaIdleGuard.Native]::GetLastInputTick()
 $idleLimit = [TimeSpan]::FromMinutes([double]$script:Config.IdleMinutes)
 $pollMs = [Math]::Max(200, [int]([double]$script:Config.PollSeconds * 1000))
+$lastRepair = [DateTime]::MinValue
 
 try {
     while ($script:Running) {
         try {
+            # Every 60 s: restore per-user auto-start if it was removed or disabled (normal start only)
+            # 60 秒ごと: ユーザー単位の自動起動が外されていたら戻す (通常起動時のみ)
+            if ($RegisterStartup -and ((Get-Date) - $lastRepair).TotalSeconds -ge 60) {
+                $lastRepair = Get-Date
+                try { Repair-AutoStartup } catch { Write-Log -Level WARN -Message "Auto-start check failed / 自動起動の確認に失敗: $($_.Exception.Message)" }
+            }
             $procs = Get-CatiaProcesses
             $pids = @($procs | ForEach-Object { [int]$_.Id })
 

@@ -45,14 +45,39 @@
 
 - **EN:** **Exit Idle Guard** and the **Start at sign-in** toggle in the tray menu ask for a password. Only its hash is stored in `config.json` (`ExitPasswordHash`), never the password itself. Give the password only to administrators.
   **JP:** トレイメニューの **終了** と **サインイン時に自動起動** の切り替えには、パスワードが必要です。`config.json` (`ExitPasswordHash`) に保存するのはハッシュ値だけで、パスワード自体は保存しません。パスワードは管理者だけに伝えてください。
-- **EN:** This deters casual exits. It cannot stop someone who ends PowerShell in Task Manager or edits `config.json`.
-  **JP:** うっかり終了を防ぐための抑止策です。タスクマネージャーでの PowerShell の強制終了や、`config.json` の書き換えは防げません。
+- **EN:** This deters casual exits. It cannot stop someone who ends PowerShell in Task Manager. In a per-user install, `config.json` can also be edited by the user; use the administrator install below to prevent that.
+  **JP:** うっかり終了を防ぐための抑止策です。タスクマネージャーでの PowerShell の強制終了は防げません。ユーザー単位のインストールでは `config.json` もユーザーが編集できます。防ぐには下記の管理者インストールを使ってください。
 - **EN:** To change the password, run the following in PowerShell with your new password, paste the result into `ExitPasswordHash` in `config.json`, then restart the tool.
   **JP:** パスワードを変更するには、新しいパスワードを入れて PowerShell で次を実行し、出力を `config.json` の `ExitPasswordHash` に貼り付けて、ツールを再起動します。
 
 ```powershell
 $s = [Security.Cryptography.SHA256]::Create(); ($s.ComputeHash([Text.Encoding]::UTF8.GetBytes('CatiaIdleGuard:' + 'NEW-PASSWORD')) | ForEach-Object { $_.ToString('x2') }) -join ''
 ```
+
+## Protecting auto-start and settings / 自動起動と設定の保護
+
+| | Per-user (Start-CatiaIdleGuard.bat) / ユーザー単位 | Administrator install (Install-AllUsers.ps1) / 管理者インストール |
+|---|---|---|
+| **EN:** Turn off auto-start in the tray / **JP:** トレイで自動起動をオフ | Password required / パスワードが必要 | Not possible (set by administrator) / 不可 (管理者設定) |
+| **EN:** Delete the shortcut or disable it in Task Manager / **JP:** ショートカット削除・タスクマネージャーで無効化 | Undone within 1 minute while the tool runs / ツール動作中は 1 分以内に元に戻す | Needs administrator rights / 管理者権限が必要 |
+| **EN:** Edit `config.json` / **JP:** `config.json` の編集 | Possible / 可能 | Needs administrator rights / 管理者権限が必要 |
+| **EN:** End PowerShell in Task Manager / **JP:** タスクマネージャーで強制終了 | Possible / 可能 | Possible / 可能 |
+
+### Administrator install / 管理者インストール
+
+- **EN:** Extract the ZIP, open PowerShell **as administrator**, and run the command below. The tool is copied to `C:\Program Files\CatiaIdleGuard` and starts for every user at the next sign-in. Logs go to `%LOCALAPPDATA%\CatiaIdleGuard\logs`.
+  **JP:** ZIP を展開し、PowerShell を **管理者として実行** で開いて、次のコマンドを実行します。ツールは `C:\Program Files\CatiaIdleGuard` にコピーされ、次回サインインから全ユーザーで自動起動します。ログは `%LOCALAPPDATA%\CatiaIdleGuard\logs` に出力されます。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-AllUsers.ps1"
+```
+
+- **EN:** Do not start the tool from the administrator window. CATIA must run at the same privilege level. Sign out and sign in again instead.
+  **JP:** 管理者ウィンドウからツールを起動しないでください。CATIA と権限レベルを合わせる必要があります。代わりにサインアウトして、サインインし直してください。
+- **EN:** Per-user copies (for example in Downloads) detect the administrator install, remove their own Startup shortcut, and exit.
+  **JP:** ユーザー単位のコピー (ダウンロードフォルダなど) は管理者インストールを検出し、自分のスタートアップを外して終了します。
+- **EN:** To change settings later, edit `C:\Program Files\CatiaIdleGuard\config.json` as administrator. To uninstall, run the same command with `-Remove`.
+  **JP:** 後で設定を変えるには、管理者として `C:\Program Files\CatiaIdleGuard\config.json` を編集します。アンインストールは同じコマンドに `-Remove` を付けて実行します。
 
 ## Files / ファイル構成
 
@@ -62,7 +87,8 @@ $s = [Security.Cryptography.SHA256]::Create(); ($s.ComputeHash([Text.Encoding]::
 | `config.json` | Settings | 設定ファイル |
 | `Start-CatiaIdleGuard.bat` | Normal start (no console, tray icon) | 通常起動用 (コンソール非表示・トレイ常駐) |
 | `Test-CatiaIdleGuard.bat` | Test start (1 min idle, 20 s warning, console visible) | 動作確認用 (無操作 1 分・警告 20 秒・コンソール表示) |
-| `Install-Startup.ps1` | Manual register/unregister of auto-start (for administrators) | 自動起動の手動登録/解除 (管理者向け) |
+| `Install-Startup.ps1` | Manual register/unregister of per-user auto-start | ユーザー単位の自動起動の手動登録/解除 |
+| `Install-AllUsers.ps1` | Administrator install for all users (Program Files + HKLM Run) | 管理者による全ユーザー向けインストール (Program Files + HKLM Run) |
 | `docs/QuickGuide.html` | User guide and download page (EN / JA / TH switch) | 使い方ガイド兼ダウンロードページ (英日タイ切替) |
 | `docs/CatiaIdleGuard_QuickGuide.pdf` | One-page printable guide (EN / JA / TH) | 印刷用 1 枚ガイド (英日タイ併記) |
 | `tools/build_guide.py` | Embeds the tool files into the HTML guide | ツール一式を HTML ガイドに埋め込む |
@@ -112,6 +138,7 @@ $s = [Security.Cryptography.SHA256]::Create(); ($s.ComputeHash([Text.Encoding]::
 | `LogFolder` | `"logs"` | Log folder. Relative paths are from the script folder | ログ出力先 (相対パスはスクリプトのフォルダ基準) |
 | `LogRetentionDays` | `30` | Days to keep logs | ログの保持日数 |
 | `AutoStartup` | `true` | Register auto-start at sign-in when started with `Start-CatiaIdleGuard.bat`. Also changed by the tray menu | `Start-CatiaIdleGuard.bat` で起動したときにサインイン時の自動起動を登録する。トレイメニューでも切り替え可 |
+| `ManagedInstall` | `false` | Set to `true` by `Install-AllUsers.ps1`. Auto-start is then managed by the administrator | `Install-AllUsers.ps1` が `true` にする。自動起動は管理者の管理になる |
 | `ExitPasswordHash` | (hash) | Password for **Exit Idle Guard** and the **Start at sign-in** toggle, stored as SHA-256 of `CatiaIdleGuard:` + password. Empty `""` = no password | トレイの **終了** と **サインイン時に自動起動** の切り替えに必要なパスワード。`CatiaIdleGuard:` + パスワード の SHA-256 で保存。空 `""` でパスワードなし |
 
 ---
