@@ -60,8 +60,19 @@ $s = [Security.Cryptography.SHA256]::Create(); ($s.ComputeHash([Text.Encoding]::
 |---|---|---|
 | **EN:** Turn off auto-start in the tray / **JP:** トレイで自動起動をオフ | Password required / パスワードが必要 | Not possible (set by administrator) / 不可 (管理者設定) |
 | **EN:** Delete the shortcut or disable it in Task Manager / **JP:** ショートカット削除・タスクマネージャーで無効化 | Undone within 1 minute while the tool runs / ツール動作中は 1 分以内に元に戻す | Needs administrator rights / 管理者権限が必要 |
-| **EN:** Edit `config.json` / **JP:** `config.json` の編集 | Possible / 可能 | Needs administrator rights / 管理者権限が必要 |
+| **EN:** Edit, delete or move `config.json` / **JP:** `config.json` の編集・削除・移動 | Detected within 15 s: password asked; otherwise restored / 15 秒以内に検出: パスワードを求め、無ければ元に戻す | Needs administrator rights / 管理者権限が必要 |
 | **EN:** End PowerShell in Task Manager / **JP:** タスクマネージャーで強制終了 | Possible / 可能 | Possible / 可能 |
+
+### Settings protection without administrator rights / 管理者権限なしでの設定の保護
+
+- **EN:** The approved `config.json` is kept in the user's registry (`HKCU\Software\CatiaIdleGuard`: file bytes and SHA-256). At start and every 15 s the tool compares the file with it.
+  **JP:** 承認済みの `config.json` を利用者のレジストリ (`HKCU\Software\CatiaIdleGuard`: 中身と SHA-256) に控えます。起動時と 15 秒ごとに、ファイルと比べます。
+- **EN:** If the file was changed, deleted or moved, the tool asks for the password **of the approved settings**. Correct: the change is accepted and applied. Cancel or wrong: the approved file is written back. Changing `ExitPasswordHash` in the file therefore does not help.
+  **JP:** 変更・削除・移動があれば、**承認済み設定の** パスワードを求めます。正しければ変更を承認して反映します。キャンセルか誤りなら、承認済みの内容に書き戻します。そのため、ファイル内の `ExitPasswordHash` を書き換えても突破できません。
+- **EN:** To change settings legitimately, edit `config.json`; within 15 s the password window appears; enter the password.
+  **JP:** 正当に設定を変えるには、`config.json` を編集します。15 秒以内にパスワード画面が出るので、パスワードを入力します。
+- **EN:** Limits: this deters editing with Notepad. A user who knows the mechanism can still edit the registry or the `.ps1`, or end PowerShell in Task Manager. Only the administrator install makes the files read-only.
+  **JP:** 限界: メモ帳での書き換えを防ぐ抑止策です。仕組みを知る人はレジストリや `.ps1` を書き換えたり、タスクマネージャーで強制終了したりできます。ファイル自体を書き換え不可にできるのは管理者インストールだけです。
 
 ### Administrator install / 管理者インストール
 

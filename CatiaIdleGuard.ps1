@@ -129,9 +129,18 @@ function Get-Config {
     return $cfg
 }
 
-$script:Config = Get-Config -Path $ConfigPath
-if ($PSBoundParameters.ContainsKey('IdleMinutes'))    { $script:Config.IdleMinutes    = $IdleMinutes }
-if ($PSBoundParameters.ContainsKey('WarningSeconds')) { $script:Config.WarningSeconds = $WarningSeconds }
+# Command-line overrides (test launcher) / コマンドラインでの上書き (テスト用)
+$script:CliOverrides = @{}
+if ($PSBoundParameters.ContainsKey('IdleMinutes'))    { $script:CliOverrides['IdleMinutes']    = $IdleMinutes }
+if ($PSBoundParameters.ContainsKey('WarningSeconds')) { $script:CliOverrides['WarningSeconds'] = $WarningSeconds }
+$script:ConfigReloaded = $false
+
+function Import-Settings {
+    $script:Config = Get-Config -Path $script:ConfigPath
+    foreach ($k in @($script:CliOverrides.Keys)) { $script:Config[$k] = $script:CliOverrides[$k] }
+    $script:ConfigReloaded = $true
+}
+Import-Settings
 
 # ------------------------------------------------------------------
 # Logging / ログ
@@ -711,11 +720,20 @@ function Get-PasswordHash {
 
 function Confirm-Password {
     # Returns $true if the password is correct or no password is set / 正しい、またはパスワード未設定なら $true
-    param([ValidateSet('exit', 'autostart')][string]$Action)
-    $expected = [string]$script:Config.ExitPasswordHash
+    param(
+        [ValidateSet('exit', 'autostart', 'config')][string]$Action,
+        [string]$ExpectedHash   # default: the current (approved) settings / 省略時は現在の承認済み設定
+    )
+    if ($PSBoundParameters.ContainsKey('ExpectedHash')) { $expected = $ExpectedHash }
+    else { $expected = [string]$script:Config.ExitPasswordHash }
     if ([string]::IsNullOrWhiteSpace($expected)) { return $true }
 
-    if ($Action -eq 'exit') {
+    if ($Action -eq 'config') {
+        $en = 'config.json was changed. Enter the password to accept the change. Cancel restores the previous settings.'
+        $jp = 'config.json が変更されました。変更を認めるにはパスワードを入力してください。キャンセルすると元の設定に戻します。'
+        $th = 'config.json ถูกแก้ไข กรุณาใส่รหัสผ่านเพื่อยอมรับการเปลี่ยนแปลง หากยกเลิก จะคืนค่าการตั้งค่าเดิม'
+    }
+    elseif ($Action -eq 'exit') {
         $en = 'Enter the password to exit CATIA Idle Guard.'
         $jp = 'CATIA Idle Guard を終了するには、パスワードを入力してください。'
         $th = 'กรุณาใส่รหัสผ่านเพื่อปิด CATIA Idle Guard'
@@ -728,7 +746,7 @@ function Confirm-Password {
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = 'CATIA Idle Guard'
-    $form.ClientSize = New-Object System.Drawing.Size(470, 200)
+    $form.ClientSize = New-Object System.Drawing.Size(470, 240)
     $form.StartPosition = 'CenterScreen'
     $form.TopMost = $true
     $form.FormBorderStyle = 'FixedDialog'
@@ -741,16 +759,16 @@ function Confirm-Password {
         $l = New-Object System.Windows.Forms.Label
         $l.AutoSize = $false
         $l.Location = New-Object System.Drawing.Point(15, $y)
-        $l.Size = New-Object System.Drawing.Size(440, 26)
+        $l.Size = New-Object System.Drawing.Size(440, 40)
         $l.Font = New-Object System.Drawing.Font($line.F, 9.5)
         $l.Text = $line.T
         $form.Controls.Add($l)
-        $y += 28
+        $y += 42
     }
 
     $box = New-Object System.Windows.Forms.TextBox
     $box.UseSystemPasswordChar = $true
-    $box.Location = New-Object System.Drawing.Point(15, 104)
+    $box.Location = New-Object System.Drawing.Point(15, 144)
     $box.Size = New-Object System.Drawing.Size(440, 26)
     $box.Font = New-Object System.Drawing.Font('Segoe UI', 11)
     $form.Controls.Add($box)
@@ -758,7 +776,7 @@ function Confirm-Password {
     $ok = New-Object System.Windows.Forms.Button
     $ok.Text = 'OK'
     $ok.Size = New-Object System.Drawing.Size(100, 32)
-    $ok.Location = New-Object System.Drawing.Point(245, 150)
+    $ok.Location = New-Object System.Drawing.Point(245, 192)
     $ok.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $form.Controls.Add($ok)
     $form.AcceptButton = $ok
@@ -766,7 +784,7 @@ function Confirm-Password {
     $cancel = New-Object System.Windows.Forms.Button
     $cancel.Text = 'Cancel / キャンセル'
     $cancel.Size = New-Object System.Drawing.Size(110, 32)
-    $cancel.Location = New-Object System.Drawing.Point(355, 150)
+    $cancel.Location = New-Object System.Drawing.Point(355, 192)
     $cancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
     $form.Controls.Add($cancel)
     $form.CancelButton = $cancel
@@ -862,6 +880,92 @@ function Repair-AutoStartup {
     catch { }   # no value = enabled / 値が無ければ有効
 }
 
+# ------------------------------------------------------------------
+# Settings protection (no administrator rights needed) / 設定の保護 (管理者権限不要)
+#   EN: The approved config.json (bytes + SHA-256) is kept in HKCU\Software\CatiaIdleGuard.
+#       If config.json is changed, deleted or moved outside the tool, the password of the APPROVED
+#       settings is asked. Correct = accept the change. Cancel/wrong = restore the approved file.
+#       This deters editing with Notepad; a user who knows the mechanism can still get around it.
+#   JP: 承認済みの config.json (中身 + SHA-256) を HKCU\Software\CatiaIdleGuard に控える。
+#       ツール以外で config.json が変更・削除・移動されたら、承認済み設定のパスワードを求める。
+#       正しければ変更を承認、キャンセル/誤りなら承認済みの内容に戻す。
+#       メモ帳での書き換えを防ぐ抑止策であり、仕組みを知る人は回避できる。
+# ------------------------------------------------------------------
+$script:RegPath = 'HKCU:\Software\CatiaIdleGuard'
+
+function Get-BytesSha256 {
+    param([byte[]]$Bytes)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return (($sha.ComputeHash($Bytes) | ForEach-Object { $_.ToString('x2') }) -join '') }
+    finally { $sha.Dispose() }
+}
+
+function Get-NormalizedConfigPath {
+    try { return [System.IO.Path]::GetFullPath([string]$script:ConfigPath) } catch { return [string]$script:ConfigPath }
+}
+
+function Save-ApprovedConfig {
+    $path = Get-NormalizedConfigPath
+    if (-not (Test-Path -LiteralPath $path)) { return }
+    $bytes = [System.IO.File]::ReadAllBytes($path)
+    if (-not (Test-Path -LiteralPath $script:RegPath)) { New-Item -Path $script:RegPath -Force | Out-Null }
+    Set-ItemProperty -Path $script:RegPath -Name 'ConfigPath'   -Value $path
+    Set-ItemProperty -Path $script:RegPath -Name 'ConfigHash'   -Value (Get-BytesSha256 $bytes)
+    Set-ItemProperty -Path $script:RegPath -Name 'ConfigBackup' -Value ([Convert]::ToBase64String($bytes))
+}
+
+function Get-ApprovedConfigState {
+    # Returns @{ State = 'first' | 'ok' | 'changed'; Backup = byte[] }
+    $none = @{ State = 'first'; Backup = $null }
+    try { $r = Get-ItemProperty -Path $script:RegPath -ErrorAction Stop } catch { return $none }
+    foreach ($n in 'ConfigPath', 'ConfigHash', 'ConfigBackup') {
+        if ($null -eq $r.PSObject.Properties[$n]) { return $none }
+    }
+    try { $backup = [Convert]::FromBase64String([string]$r.ConfigBackup) } catch { return $none }
+    $path = Get-NormalizedConfigPath
+    $samePath = [string]::Equals([string]$r.ConfigPath, $path, [System.StringComparison]::OrdinalIgnoreCase)
+    if ($samePath -and (Test-Path -LiteralPath $path)) {
+        $hash = Get-BytesSha256 ([System.IO.File]::ReadAllBytes($path))
+        if ($hash -eq [string]$r.ConfigHash) { return @{ State = 'ok'; Backup = $backup } }
+    }
+    return @{ State = 'changed'; Backup = $backup }
+}
+
+function Invoke-ConfigProtection {
+    if ([bool]$script:Config.ManagedInstall) { return }   # Program Files install: protected by NTFS / 管理者インストールは NTFS で保護
+    $st = Get-ApprovedConfigState
+    if ($st.State -eq 'ok') { return }
+    if ($st.State -eq 'first') {
+        Save-ApprovedConfig
+        Write-Log -Message 'Settings protection on: current config.json approved / 設定の保護を開始: 現在の config.json を承認しました'
+        return
+    }
+
+    Write-Log -Level WARN -Message 'config.json was changed, deleted or moved outside the tool / config.json がツール以外で変更・削除・移動されました'
+    # Password of the APPROVED settings (not of the edited file) / 編集後のファイルではなく、承認済み設定のパスワード
+    $prevHash = [string]$script:DefaultConfig.ExitPasswordHash
+    try {
+        $text = [System.Text.Encoding]::UTF8.GetString($st.Backup).TrimStart([char]0xFEFF)
+        $prev = $text | ConvertFrom-Json
+        if ($null -ne $prev.PSObject.Properties['ExitPasswordHash']) { $prevHash = [string]$prev.ExitPasswordHash }
+    }
+    catch { }
+
+    $path = Get-NormalizedConfigPath
+    if ((Test-Path -LiteralPath $path) -and (Confirm-Password -Action 'config' -ExpectedHash $prevHash)) {
+        Save-ApprovedConfig
+        Import-Settings
+        Write-Log -Message 'config.json change accepted with password / パスワードにより config.json の変更を承認しました'
+    }
+    else {
+        [System.IO.File]::WriteAllBytes($path, $st.Backup)
+        Save-ApprovedConfig
+        Import-Settings
+        Write-Log -Level WARN -Message 'config.json restored to the approved settings / config.json を承認済みの設定に戻しました'
+        Show-Balloon -Title 'CATIA Idle Guard' -Text ("Settings restored.`n設定を元に戻しました`nคืนค่าการตั้งค่าแล้ว")
+    }
+}
+
 function Set-ConfigValue {
     # Save one setting to config.json (other settings are kept) / config.json の 1 項目だけを書き換える
     param([string]$Name, $Value)
@@ -873,6 +977,7 @@ function Set-ConfigValue {
     $obj | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
     $obj | ConvertTo-Json | Set-Content -LiteralPath $script:ConfigPath -Encoding UTF8
     $script:Config[$Name] = $Value
+    try { Save-ApprovedConfig } catch { }   # changes made by the tool itself are approved / ツール自身の変更は承認済みにする
 }
 
 # ------------------------------------------------------------------
@@ -966,6 +1071,8 @@ $script:Running = $true
 Write-Log -Message ('CATIA Idle Guard started / 起動 (IdleMinutes={0}, WarningSeconds={1}, Process={2}, Backup={3})' -f `
     $script:Config.IdleMinutes, $script:Config.WarningSeconds, $script:Config.ProcessName, $script:Config.BackupFolder)
 Remove-OldLogs
+try { Invoke-ConfigProtection }
+catch { Write-Log -Level WARN -Message "Settings protection check failed / 設定の保護の確認に失敗: $($_.Exception.Message)" }
 if ([bool]$script:Config.ManagedInstall) {
     # Auto-start comes from HKLM Run; remove a leftover per-user shortcut / 自動起動は HKLM Run が担当。ユーザー単位の残りを外す
     try { Unregister-AutoStartup } catch { }
@@ -982,10 +1089,24 @@ $lastInputTick = [CatiaIdleGuard.Native]::GetLastInputTick()
 $idleLimit = [TimeSpan]::FromMinutes([double]$script:Config.IdleMinutes)
 $pollMs = [Math]::Max(200, [int]([double]$script:Config.PollSeconds * 1000))
 $lastRepair = [DateTime]::MinValue
+$lastConfigCheck = Get-Date
+$script:ConfigReloaded = $false
 
 try {
     while ($script:Running) {
         try {
+            # Every 15 s: detect changes to config.json / 15 秒ごと: config.json の変更を検出
+            if (((Get-Date) - $lastConfigCheck).TotalSeconds -ge 15) {
+                $lastConfigCheck = Get-Date
+                try { Invoke-ConfigProtection } catch { Write-Log -Level WARN -Message "Settings protection check failed / 設定の保護の確認に失敗: $($_.Exception.Message)" }
+            }
+            if ($script:ConfigReloaded) {
+                $script:ConfigReloaded = $false
+                $idleLimit = [TimeSpan]::FromMinutes([double]$script:Config.IdleMinutes)
+                $pollMs = [Math]::Max(200, [int]([double]$script:Config.PollSeconds * 1000))
+                Write-Log -Message ('Settings applied / 設定を反映 (IdleMinutes={0}, WarningSeconds={1})' -f $script:Config.IdleMinutes, $script:Config.WarningSeconds)
+            }
+
             # Every 60 s: restore per-user auto-start if it was removed or disabled (normal start only)
             # 60 秒ごと: ユーザー単位の自動起動が外されていたら戻す (通常起動時のみ)
             if ($RegisterStartup -and ((Get-Date) - $lastRepair).TotalSeconds -ge 60) {
