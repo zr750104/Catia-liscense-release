@@ -142,6 +142,18 @@ function Import-Settings {
 }
 Import-Settings
 
+# Managed (all-users) mode only when the tool really runs from Program Files, where users cannot edit files.
+# A per-user config.json that says ManagedInstall=true is not enough (that would switch protection off).
+# 管理者インストール扱いは、実際に Program Files (ユーザーが書き換えられない場所) から動いている場合だけ。
+# ユーザー単位の config.json に ManagedInstall=true と書いただけでは認めない (保護が外れてしまうため)。
+function Test-IsManaged {
+    if (-not [bool]$script:Config.ManagedInstall) { return $false }
+    foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if ($root -and ([string]$script:ScriptDir).StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
 # ------------------------------------------------------------------
 # Logging / ログ
 #   Messages are written as "English / 日本語".
@@ -227,7 +239,7 @@ function Test-ManagedInstallPresent {
     catch { return $false }
 }
 
-if (-not [bool]$script:Config.ManagedInstall -and (Test-ManagedInstallPresent)) {
+if (-not (Test-IsManaged) -and (Test-ManagedInstallPresent)) {
     Write-Log -Level WARN -Message 'Installed for all users by an administrator. This per-user copy exits. / 管理者が全ユーザー向けにインストール済みのため、このコピーは終了します。'
     try {
         $userLnk = Join-Path ([Environment]::GetFolderPath('Startup')) 'CATIA Idle Guard.lnk'
@@ -859,7 +871,7 @@ function Repair-AutoStartup {
     #     The only intended way to turn it off is the password-protected tray menu.
     # JP: 動作中に、スタートアップの削除やタスクマネージャーでの「無効化」を元に戻す。
     #     正式に止める方法は、パスワード付きのトレイメニューだけとする。
-    if ([bool]$script:Config.ManagedInstall -or -not [bool]$script:Config.AutoStartup) { return }
+    if ((Test-IsManaged) -or -not [bool]$script:Config.AutoStartup) { return }
     $lnk = Get-StartupShortcutPath
     $existed = Test-Path -LiteralPath $lnk
     [void](Register-AutoStartup)
@@ -931,13 +943,64 @@ function Get-ApprovedConfigState {
     return @{ State = 'changed'; Backup = $backup }
 }
 
+function Test-ConfigMatchesDefaults {
+    # True if every known setting in config.json equals the built-in default (missing key = default)
+    # config.json の各設定が本体の標準値と同じなら True (項目が無ければ標準値とみなす)
+    $path = Get-NormalizedConfigPath
+    if (-not (Test-Path -LiteralPath $path)) { return $false }
+    try {
+        $text = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8).TrimStart([char]0xFEFF)
+        $obj = $text | ConvertFrom-Json
+    }
+    catch { return $false }
+    foreach ($k in @($script:DefaultConfig.Keys)) {
+        $def = [string]$script:DefaultConfig[$k]
+        $prop = $obj.PSObject.Properties[$k]
+        $val = if ($null -ne $prop) { [string]$prop.Value } else { $def }
+        if ($val -ne $def) {
+            Write-Log -Level WARN -Message "  Differs from default / 標準値と異なる: $k = '$val' (default / 標準値 '$def')"
+            return $false
+        }
+    }
+    return $true
+}
+
+function Write-DefaultConfig {
+    # Write the built-in defaults to config.json / 本体の標準値を config.json に書き出す
+    $ordered = [ordered]@{}
+    foreach ($k in @($script:DefaultConfig.Keys)) { $ordered[$k] = $script:DefaultConfig[$k] }
+    $ordered | ConvertTo-Json | Set-Content -LiteralPath (Get-NormalizedConfigPath) -Encoding UTF8
+}
+
 function Invoke-ConfigProtection {
-    if ([bool]$script:Config.ManagedInstall) { return }   # Program Files install: protected by NTFS / 管理者インストールは NTFS で保護
+    if ((Test-IsManaged)) { return }   # Program Files install: protected by NTFS / 管理者インストールは NTFS で保護
     $st = Get-ApprovedConfigState
     if ($st.State -eq 'ok') { return }
     if ($st.State -eq 'first') {
-        Save-ApprovedConfig
-        Write-Log -Message 'Settings protection on: current config.json approved / 設定の保護を開始: 現在の config.json を承認しました'
+        # No approved copy yet (first run, or the registry record was deleted). Never trust the file as it is:
+        # it is approved only if it equals the built-in defaults, or with the password.
+        # 承認済みの控えが無い (初回、または控えが消された)。ファイルをそのまま信用しない:
+        # 本体の標準値と同じ場合か、パスワードが正しい場合だけ承認する。
+        if (Test-ConfigMatchesDefaults) {
+            Save-ApprovedConfig
+            Write-Log -Message 'Settings protection on: config.json equals the defaults and was approved / 設定の保護を開始: config.json は標準値どおりのため承認しました'
+            return
+        }
+        Write-Log -Level WARN -Message 'Settings protection on: config.json differs from the defaults / 設定の保護を開始: config.json が標準値と異なります'
+        $path = Get-NormalizedConfigPath
+        if ((Test-Path -LiteralPath $path) -and
+            (Confirm-Password -Action 'config' -ExpectedHash ([string]$script:DefaultConfig.ExitPasswordHash))) {
+            Save-ApprovedConfig
+            Import-Settings
+            Write-Log -Message 'Non-default config.json approved with password / パスワードにより標準値以外の config.json を承認しました'
+        }
+        else {
+            Write-DefaultConfig
+            Save-ApprovedConfig
+            Import-Settings
+            Write-Log -Level WARN -Message 'config.json reset to the defaults / config.json を標準値に戻しました'
+            Show-Balloon -Title 'CATIA Idle Guard' -Text ("Settings reset to defaults.`n設定を標準値に戻しました`nคืนค่าเริ่มต้นแล้ว")
+        }
         return
     }
 
@@ -1007,7 +1070,7 @@ function Initialize-Tray {
     })
     $itemAuto = New-Object System.Windows.Forms.ToolStripMenuItem('Start at sign-in / サインイン時に自動起動 / เริ่มอัตโนมัติเมื่อลงชื่อเข้าใช้')
     $itemAuto.Checked = (Test-AutoStartup)
-    if ([bool]$script:Config.ManagedInstall) {
+    if ((Test-IsManaged)) {
         $itemAuto.Text = 'Start at sign-in (set by administrator) / サインイン時に自動起動 (管理者設定) / เริ่มอัตโนมัติ (ตั้งค่าโดยผู้ดูแลระบบ)'
         $itemAuto.Checked = $true
         $itemAuto.Enabled = $false
@@ -1073,7 +1136,7 @@ Write-Log -Message ('CATIA Idle Guard started / 起動 (IdleMinutes={0}, Warning
 Remove-OldLogs
 try { Invoke-ConfigProtection }
 catch { Write-Log -Level WARN -Message "Settings protection check failed / 設定の保護の確認に失敗: $($_.Exception.Message)" }
-if ([bool]$script:Config.ManagedInstall) {
+if ((Test-IsManaged)) {
     # Auto-start comes from HKLM Run; remove a leftover per-user shortcut / 自動起動は HKLM Run が担当。ユーザー単位の残りを外す
     try { Unregister-AutoStartup } catch { }
 }

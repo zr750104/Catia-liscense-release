@@ -69,6 +69,10 @@ $s = [Security.Cryptography.SHA256]::Create(); ($s.ComputeHash([Text.Encoding]::
   **JP:** 承認済みの `config.json` を利用者のレジストリ (`HKCU\Software\CatiaIdleGuard`: 中身と SHA-256) に控えます。起動時と 15 秒ごとに、ファイルと比べます。
 - **EN:** If the file was changed, deleted or moved, the tool asks for the password **of the approved settings**. Correct: the change is accepted and applied. Cancel or wrong: the approved file is written back. Changing `ExitPasswordHash` in the file therefore does not help.
   **JP:** 変更・削除・移動があれば、**承認済み設定の** パスワードを求めます。正しければ変更を承認して反映します。キャンセルか誤りなら、承認済みの内容に書き戻します。そのため、ファイル内の `ExitPasswordHash` を書き換えても突破できません。
+- **EN:** First run (or after the registry record was deleted): `config.json` is approved only if it equals the built-in defaults (15 min, 60 s, ...). Otherwise the password is asked; Cancel or a wrong password writes the defaults back. Deleting the registry record therefore cannot be used to sneak in other values.
+  **JP:** 初回 (またはレジストリの控えが消された後): `config.json` は本体の標準値 (15 分、60 秒など) と同じ場合だけ承認します。違う場合はパスワードを求め、キャンセルか誤りなら標準値に書き戻します。レジストリの控えを消しても、別の値を通すことはできません。
+- **EN:** `ManagedInstall: true` is honoured only when the tool runs from Program Files, so writing it into a per-user `config.json` does not switch protection off.
+  **JP:** `ManagedInstall: true` は、ツールが Program Files から動いている場合だけ有効です。ユーザー単位の `config.json` に書いても、保護は外れません。
 - **EN:** To change settings legitimately, edit `config.json`; within 15 s the password window appears; enter the password.
   **JP:** 正当に設定を変えるには、`config.json` を編集します。15 秒以内にパスワード画面が出るので、パスワードを入力します。
 - **EN:** Limits: this deters editing with Notepad. A user who knows the mechanism can still edit the registry or the `.ps1`, or end PowerShell in Task Manager. Only the administrator install makes the files read-only.
