@@ -71,6 +71,8 @@ $s = [Security.Cryptography.SHA256]::Create(); ($s.ComputeHash([Text.Encoding]::
   **JP:** 変更・削除・移動があれば、**承認済み設定の** パスワードを求めます。正しければ変更を承認して反映します。キャンセルか誤りなら、承認済みの内容に書き戻します。そのため、ファイル内の `ExitPasswordHash` を書き換えても突破できません。
 - **EN:** First run (or after the registry record was deleted): `config.json` is approved only if it equals the built-in defaults (15 min, 60 s, ...). Otherwise the password is asked; Cancel or a wrong password writes the defaults back. Deleting the registry record therefore cannot be used to sneak in other values.
   **JP:** 初回 (またはレジストリの控えが消された後): `config.json` は本体の標準値 (15 分、60 秒など) と同じ場合だけ承認します。違う場合はパスワードを求め、キャンセルか誤りなら標準値に書き戻します。レジストリの控えを消しても、別の値を通すことはできません。
+- **EN:** `IdleMinutes` below 15 is never accepted: the approved settings (or the defaults) are written back without asking for the password. The test launcher's 1-minute value is a command-line option and is not affected.
+  **JP:** 15 分未満の `IdleMinutes` は認めません。パスワードを聞かずに、承認済みの設定 (または標準値) に書き戻します。テスト用 bat の 1 分はコマンドラインの指定なので影響を受けません。
 - **EN:** `ManagedInstall: true` is honoured only when the tool runs from Program Files, so writing it into a per-user `config.json` does not switch protection off.
   **JP:** `ManagedInstall: true` は、ツールが Program Files から動いている場合だけ有効です。ユーザー単位の `config.json` に書いても、保護は外れません。
 - **EN:** To change settings legitimately, edit `config.json`; within 15 s the password window appears; enter the password.
@@ -143,7 +145,7 @@ powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-AllUse
 
 | Key / キー | Default / 既定値 | Description (EN) | 説明 (JP) |
 |---|---|---|---|
-| `IdleMinutes` | `15` | Show the warning after this many minutes without CATIA activity | この分数 CATIA 操作が無ければ警告を出す |
+| `IdleMinutes` | `15` | Show the warning after this many minutes without CATIA activity. **Minimum 15**: smaller values are rejected even with the password | この分数 CATIA 操作が無ければ警告を出す。**最短 15**: それより小さい値はパスワードがあっても認めない |
 | `WarningSeconds` | `60` | Countdown of the warning dialog (seconds) | 警告ダイアログのカウントダウン秒数 |
 | `PollSeconds` | `1` | Monitoring interval (seconds) | 入力監視の周期 (秒) |
 | `ProcessName` | `"CNEXT"` | CATIA V5 process name, without `.exe` | CATIA V5 本体のプロセス名 (拡張子なし) |

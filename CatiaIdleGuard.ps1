@@ -106,6 +106,10 @@ $script:DefaultConfig = [ordered]@{
     ExitPasswordHash      = '09051bb0e9234daaf296e3f915794e6a3655c9236370bfd92fb4a8f4b7d4d355'
 }
 
+# Minimum idle time allowed in config.json (fixed in the program, not configurable)
+# config.json で認める最短の無操作時間 (本体で固定。設定では変えられない)
+$script:MinIdleMinutes = 15
+
 function Get-Config {
     param([string]$Path)
     $cfg = [ordered]@{}
@@ -120,6 +124,12 @@ function Get-Config {
         catch {
             Write-Warning "Failed to read config.json. Using defaults. / config.json の読み込みに失敗しました。既定値で続行します: $($_.Exception.Message)"
         }
+    }
+    # Never run with less than the minimum idle time from the file (test overrides are applied later)
+    # ファイルの値が最短時間未満なら最短時間にする (テスト用の上書きはこの後で適用)
+    $idle = 0.0
+    if (-not [double]::TryParse([string]$cfg.IdleMinutes, [ref]$idle) -or $idle -lt $script:MinIdleMinutes) {
+        $cfg.IdleMinutes = $script:MinIdleMinutes
     }
     $cfg.BackupFolder = [Environment]::ExpandEnvironmentVariables([string]$cfg.BackupFolder)
     $cfg.LogFolder = [Environment]::ExpandEnvironmentVariables([string]$cfg.LogFolder)
@@ -965,6 +975,22 @@ function Test-ConfigMatchesDefaults {
     return $true
 }
 
+function Test-IdleMinutesAllowed {
+    # False if the JSON (bytes) sets IdleMinutes below the minimum or to a non-number. Missing = default (OK).
+    # JSON の IdleMinutes が最短時間未満か数値でなければ False。項目が無ければ標準値扱いで OK。
+    param([byte[]]$Bytes)
+    if ($null -eq $Bytes) { return $true }
+    try {
+        $obj = [System.Text.Encoding]::UTF8.GetString($Bytes).TrimStart([char]0xFEFF) | ConvertFrom-Json
+    }
+    catch { return $true }   # unreadable JSON is handled by the normal change check / 読めない JSON は通常の変更検出で扱う
+    $prop = $obj.PSObject.Properties['IdleMinutes']
+    if ($null -eq $prop) { return $true }
+    $v = 0.0
+    if (-not [double]::TryParse([string]$prop.Value, [ref]$v)) { return $false }
+    return ($v -ge $script:MinIdleMinutes)
+}
+
 function Write-DefaultConfig {
     # Write the built-in defaults to config.json / 本体の標準値を config.json に書き出す
     $ordered = [ordered]@{}
@@ -975,6 +1001,31 @@ function Write-DefaultConfig {
 function Invoke-ConfigProtection {
     if ((Test-IsManaged)) { return }   # Program Files install: protected by NTFS / 管理者インストールは NTFS で保護
     $st = Get-ApprovedConfigState
+
+    # Rule: IdleMinutes below the minimum is never accepted, not even with the password
+    # ルール: 最短時間未満の IdleMinutes は、パスワードがあっても認めない
+    $path = Get-NormalizedConfigPath
+    if (Test-Path -LiteralPath $path) {
+        $current = [System.IO.File]::ReadAllBytes($path)
+        if (-not (Test-IdleMinutesAllowed $current)) {
+            Write-Log -Level WARN -Message ("IdleMinutes below {0} min is not allowed / {0} 分未満の IdleMinutes は認めません" -f $script:MinIdleMinutes)
+            if ($st.State -ne 'first' -and $null -ne $st.Backup -and (Test-IdleMinutesAllowed $st.Backup)) {
+                [System.IO.File]::WriteAllBytes($path, $st.Backup)
+                Write-Log -Level WARN -Message 'config.json restored to the approved settings / config.json を承認済みの設定に戻しました'
+            }
+            else {
+                Write-DefaultConfig
+                Write-Log -Level WARN -Message 'config.json reset to the defaults / config.json を標準値に戻しました'
+            }
+            Save-ApprovedConfig
+            Import-Settings
+            Show-Balloon -Title 'CATIA Idle Guard' -Text (("Under {0} min not allowed. Restored.`n" +
+                "{0} 分未満は不可。元に戻しました`n" +
+                'ห้ามต่ำกว่า {0} นาที คืนค่าแล้ว') -f $script:MinIdleMinutes)
+            return
+        }
+    }
+
     if ($st.State -eq 'ok') { return }
     if ($st.State -eq 'first') {
         # No approved copy yet (first run, or the registry record was deleted). Never trust the file as it is:
