@@ -1,0 +1,13 @@
+{
+  "IdleMinutes": 15,
+  "WarningSeconds": 30,
+  "PollSeconds": 1,
+  "ProcessName": "CNEXT",
+  "Licenses": [],
+  "ReacquireOnReturn": true,
+  "ControllerName": "CATSysDynLicenseSettingCtrl",
+  "ReleaseValue": "NotRequested",
+  "RequestValue": "Requested",
+  "LogFolder": "logs",
+  "LogRetentionDays": 30
+}

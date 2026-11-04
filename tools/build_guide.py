@@ -27,6 +27,15 @@ FILES = [
     ('Install-AllUsers.ps1',               'Install-AllUsers.ps1',          'f_admin',  True),
     ('README.md',                          'README.md',                     'f_readme', True),
     ('docs/CatiaIdleGuard_QuickGuide.pdf', 'CatiaIdleGuard_QuickGuide.pdf', 'f_pdf',    False),
+    # Second tool: releases shareable-product licenses only (CATIA stays open) / 第 2 のツール: シェアラブル製品のみ返却
+    ('shareable/CatiaShareableGuard.ps1',       'shareable/CatiaShareableGuard.ps1',       None, False),
+    ('shareable/config.json',                   'shareable/config.json',                   None, False),
+    ('shareable/Start-CatiaShareableGuard.bat', 'shareable/Start-CatiaShareableGuard.bat', None, False),
+    ('shareable/Test-CatiaShareableGuard.bat',  'shareable/Test-CatiaShareableGuard.bat',  None, False),
+    ('shareable/Diag-ListLicenses.bat',         'shareable/Diag-ListLicenses.bat',         None, False),
+    ('shareable/Diag-ReleaseNow.bat',           'shareable/Diag-ReleaseNow.bat',           None, False),
+    ('shareable/Diag-RequestNow.bat',           'shareable/Diag-RequestNow.bat',           None, False),
+    ('shareable/README.md',                     'shareable/README.md',                     None, False),
 ]
 TEXT_EXT = {'.ps1', '.bat', '.json', '.md'}
 MIME = {'.ps1': 'text/plain', '.bat': 'text/plain', '.json': 'application/json',

@@ -199,6 +199,11 @@ powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-AllUse
 
 ---
 
+## Second tool: CATIA Shareable Guard / 第 2 のツール
+
+- **EN:** `shareable/` contains a tool with a different approach: it releases only the **shareable product** licenses after inactivity and keeps CATIA open; the commands of those products are greyed out until the user returns. See `shareable/README.md`, including the diagnostic steps that must be run first.
+  **JP:** `shareable/` に別アプローチのツールがあります。無操作時に**シェアラブル製品**のライセンスだけを返却し、CATIA は開いたままにします。その製品のコマンドは利用者が戻るまでグレーアウトします。先に実行する診断手順を含め、`shareable/README.md` を参照してください。
+
 ## Quick guide (PDF) / 使い方ガイド (PDF)
 
 - **EN:** A one-page user guide in English, Japanese and Thai is in `docs/CatiaIdleGuard_QuickGuide.pdf`. The source is `docs/guide.html`.
