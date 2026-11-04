@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>CATIA Idle Guard Quick Guide</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root { --ink:#1d2433; --sub:#5a6476; --accent:#0b5cad; --accent-bg:#e8f1fb; --warn:#b4540a; --warn-bg:#fff3e6; --line:#d5dbe5; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:#fff; }
+  body { width:210mm; height:297mm; padding:10mm 11mm 8mm; font-family:"IPAPGothic","IPAGothic",sans-serif; color:var(--ink); font-size:8.7pt; line-height:1.4; }
+  .en { color:var(--ink); }
+  .jp { color:var(--sub); }
+  header { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2.5px solid var(--accent); padding-bottom:2.5mm; margin-bottom:3mm; }
+  h1 { margin:0; font-size:19pt; letter-spacing:.3px; color:var(--accent); }
+  h1 small { font-size:11pt; color:var(--ink); font-weight:normal; margin-left:2mm; }
+  .tag { text-align:right; font-size:8pt; color:var(--sub); }
+  .lead { background:var(--accent-bg); border-radius:2mm; padding:2.2mm 3mm; margin-bottom:3mm; font-size:8.8pt; }
+  .lead b { color:var(--accent); }
+  h2 { font-size:10.5pt; margin:0 0 1.6mm; color:#fff; background:var(--accent); padding:1mm 2.5mm; border-radius:1.2mm; }
+  h2 .jp { color:#dbe8f7; font-weight:normal; margin-left:1.5mm; font-size:9pt; }
+  section { margin-bottom:3.2mm; }
+  /* flow */
+  .flow { display:flex; align-items:stretch; gap:1.2mm; }
+  .step { flex:1; border:1px solid var(--line); border-radius:1.6mm; padding:2.2mm 1.8mm; text-align:center; font-size:8.2pt; line-height:1.3; background:#fafbfd; }
+  .step .n { display:inline-block; width:5mm; height:5mm; line-height:5mm; border-radius:50%; background:var(--accent); color:#fff; font-weight:bold; font-size:8pt; margin-bottom:.8mm; }
+  .step.last { background:#e9f7ee; border-color:#9fd3b0; }
+  .step.last .n { background:#1f8a4c; }
+  .arrow { align-self:center; color:var(--accent); font-size:11pt; font-weight:bold; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:4mm; }
+  ol { margin:0; padding-left:5mm; }
+  ol li { margin-bottom:1.3mm; }
+  ul { margin:0; padding-left:4.5mm; }
+  ul li { margin-bottom:1.1mm; }
+  code { font-family:"DejaVu Sans Mono","Liberation Mono",monospace; background:#eef1f5; border-radius:.8mm; padding:0 .8mm; font-size:7.6pt; }
+  .cmd { font-family:"DejaVu Sans Mono","Liberation Mono",monospace; background:#1d2433; color:#e8edf5; border-radius:1.2mm; padding:1.5mm 2mm; font-size:7pt; margin:1mm 0 0; word-break:break-all; }
+  /* dialog mock */
+  .dialog { border:1px solid #9aa6b8; border-radius:1.5mm; overflow:hidden; box-shadow:0 .6mm 1.5mm rgba(0,0,0,.12); margin:1mm 0 2mm; }
+  .dialog .bar { background:#e9edf3; padding:.9mm 2mm; font-size:7.5pt; border-bottom:1px solid #c9d1dd; }
+  .dialog .body { padding:2mm 2.5mm; font-size:7.9pt; line-height:1.35; }
+  .dialog .btns { display:flex; gap:2mm; padding:0 2.5mm 2.2mm; }
+  .btn { flex:1; border:1px solid #8c98ab; border-radius:1mm; background:#f4f6f9; text-align:center; font-size:7.3pt; padding:1mm; line-height:1.25; }
+  .btn.a { border-color:var(--accent); border-width:1.5px; }
+  table { width:100%; border-collapse:collapse; font-size:8.1pt; }
+  td { border-bottom:1px solid var(--line); padding:1mm 1mm; vertical-align:top; }
+  td:first-child { font-weight:bold; width:40%; }
+  .warnbox { background:var(--warn-bg); border-left:3px solid var(--warn); border-radius:1mm; padding:2mm 2.5mm; }
+  .warnbox h3 { margin:0 0 1mm; font-size:9pt; color:var(--warn); }
+  .ico { display:inline-block; width:3.6mm; height:3.6mm; vertical-align:-0.7mm; }
+  footer { position:absolute; bottom:6mm; left:11mm; right:11mm; border-top:1px solid var(--line); padding-top:1.5mm; font-size:7pt; color:var(--sub); display:flex; justify-content:space-between; }
+  body { position:relative; }
+  .pair .jp { display:block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CATIA Idle Guard <small>Quick Guide / 使い方ガイド</small></h1>
+  <div class="tag">For CATIA V5 users / CATIA V5 利用者向け<br>Windows PowerShell 5.1</div>
+</header>
+
+<div class="lead pair">
+  <span class="en">If you do not use CATIA for <b>15 minutes</b>, this tool <b>saves your unsaved work</b> to a backup folder and <b>closes CATIA</b>, so the license goes back to the server for other people.</span>
+  <span class="jp">CATIA を <b>15 分間</b>操作しないと、<b>未保存のデータをバックアップ保存</b>してから <b>CATIA を終了</b>し、ライセンスをサーバへ返却します。他の人がライセンスを使えるようになります。</span>
+</div>
+
+<section>
+  <h2>How it works<span class="jp">動作の流れ</span></h2>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><br>No input in CATIA<br>for 15 min<br><span class="jp">CATIA 操作なし<br>15 分</span></div>
+    <div class="arrow">&#9654;</div>
+    <div class="step"><div class="n">2</div><br>Warning dialog<br>60 s countdown<br><span class="jp">警告ダイアログ<br>60 秒カウントダウン</span></div>
+    <div class="arrow">&#9654;</div>
+    <div class="step"><div class="n">3</div><br>Unsaved files saved<br>to backup folder<br><span class="jp">未保存ファイルを<br>バックアップ保存</span></div>
+    <div class="arrow">&#9654;</div>
+    <div class="step"><div class="n">4</div><br>CATIA closes<br><span class="jp">CATIA 終了</span></div>
+    <div class="arrow">&#9654;</div>
+    <div class="step last"><div class="n">5</div><br>License returned<br><span class="jp">ライセンス返却</span></div>
+  </div>
+  <p style="margin:1.5mm 0 0; font-size:7.6pt;"><span class="en">Only input <b>in a CATIA window</b> counts. Working in Excel or Outlook does <b>not</b> stop the timer.</span> <span class="jp">／ CATIA のウィンドウでの操作だけを数えます。Excel や Outlook を使っていてもタイマーは進みます。</span></p>
+</section>
+
+<div class="cols">
+  <div>
+    <section>
+      <h2>1. First-time setup<span class="jp">初回セットアップ</span></h2>
+      <ol>
+        <li><span class="en">Copy the folder to your PC, e.g. <code>C:\Tools\CatiaIdleGuard</code></span><span class="jp" style="display:block">フォルダを PC にコピーします (例: <code>C:\Tools\CatiaIdleGuard</code>)</span></li>
+        <li><span class="en">Double-click <code>Start-CatiaIdleGuard.bat</code></span><span class="jp" style="display:block"><code>Start-CatiaIdleGuard.bat</code> をダブルクリックします</span></li>
+        <li><span class="en">A <b>shield icon</b>
+          <svg class="ico" viewBox="0 0 16 16"><path d="M8 1 2 3.5v4C2 11 4.6 14 8 15c3.4-1 6-4 6-7.5v-4z" fill="#0b5cad"/><path d="M8 2.6v10.9C5.5 12.6 3.6 10.3 3.6 7.6V4.6z" fill="#f2c94c"/></svg>
+          appears in the system tray. It is now running.</span><span class="jp" style="display:block">タスクトレイに<b>盾アイコン</b>が出れば起動完了です</span></li>
+        <li><span class="en">Auto-start at Windows sign-in (one time only):</span><span class="jp" style="display:block">サインイン時に自動起動する設定 (1 回だけ実行):</span>
+          <div class="cmd">powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startup.ps1"</div>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>2. When the warning appears<span class="jp">警告が出たら</span></h2>
+      <div class="dialog">
+        <div class="bar">CATIA Idle Guard</div>
+        <div class="body">CATIA has not been used for 15 minutes. In 60 seconds, unsaved documents will be backed up and CATIA will be closed ...<br><span class="jp">15 分間 CATIA の操作がありません。60 秒後に未保存の文書を…</span></div>
+        <div class="btns">
+          <div class="btn a">Continue working<br>作業を続行する</div>
+          <div class="btn">Save and quit now<br>今すぐ保存して終了</div>
+        </div>
+      </div>
+      <table>
+        <tr><td>Continue working<br><span class="jp">作業を続行する</span></td><td>Keep using CATIA. Timer restarts.<br><span class="jp">作業を続けます。タイマーがリセットされます。</span></td></tr>
+        <tr><td>Click a CATIA window<br><span class="jp">CATIA をクリック</span></td><td>Same as "Continue working".<br><span class="jp">「作業を続行する」と同じです。</span></td></tr>
+        <tr><td>Save and quit now<br><span class="jp">今すぐ保存して終了</span></td><td>Back up and close CATIA now.<br><span class="jp">すぐにバックアップして終了します。</span></td></tr>
+        <tr><td>No answer for 60 s<br><span class="jp">60 秒間 応答なし</span></td><td>Back up and close CATIA.<br><span class="jp">バックアップして終了します。</span></td></tr>
+      </table>
+    </section>
+  </div>
+
+  <div>
+    <section>
+      <h2>3. Get your unsaved work back<span class="jp">未保存データの戻し方</span></h2>
+      <ol>
+        <li><span class="en">Right-click the shield icon &rarr; <b>Open backup folder</b></span><span class="jp" style="display:block">盾アイコンを右クリック &rarr; <b>バックアップフォルダを開く</b></span></li>
+        <li><span class="en">Open the date-time folder, e.g. <code>20261104_153012</code></span><span class="jp" style="display:block">日時の名前のフォルダを開きます (例: <code>20261104_153012</code>)</span></li>
+        <li><span class="en">Open the file in CATIA and use <b>File &rarr; Save As</b> to save it to the original place.</span><span class="jp" style="display:block">CATIA でファイルを開き、<b>ファイル &rarr; 名前を付けて保存</b>で元の場所へ保存します</span></li>
+      </ol>
+      <p style="margin:1mm 0 0; font-size:7.6pt;"><span class="en"><b>Your original files are never overwritten.</b></span> <span class="jp">／ 元のファイルは上書きされません。</span><br>
+      <span class="en">Default folder:</span> <span class="jp">既定の保存先:</span> <code>Documents\CATIA_AutoBackup</code></p>
+    </section>
+
+    <section>
+      <h2>4. Tray menu<span class="jp">トレイメニュー (右クリック)</span></h2>
+      <table>
+        <tr><td>Status<br><span class="jp">状態</span></td><td>Time left before CATIA closes.<br><span class="jp">CATIA 終了までの残り時間</span></td></tr>
+        <tr><td>Open log folder<br><span class="jp">ログフォルダを開く</span></td><td>Records of what happened.<br><span class="jp">動作の記録</span></td></tr>
+        <tr><td>Open backup folder<br><span class="jp">バックアップフォルダを開く</span></td><td>Saved files.<br><span class="jp">保存されたファイル</span></td></tr>
+        <tr><td>Exit Idle Guard<br><span class="jp">Idle Guard を終了</span></td><td>Stop the tool (before a long Update).<br><span class="jp">ツールを停止 (長時間の更新前など)</span></td></tr>
+      </table>
+    </section>
+
+    <section class="warnbox">
+      <h3>Important / 注意</h3>
+      <ul>
+        <li><span class="en"><b>Long Update or calculation</b> without mouse/keyboard input counts as idle. Exit Idle Guard from the tray first.</span><span class="jp" style="display:block">マウス/キー入力の無い<b>長時間の更新・計算</b>も無操作扱いです。先にトレイから Idle Guard を終了してください。</span></li>
+        <li><span class="en">Do <b>not</b> run as Administrator.</span><span class="jp" style="display:block">管理者として実行しないでください。</span></li>
+        <li><span class="en">If a save fails, CATIA is <b>not</b> closed. Check the log.</span><span class="jp" style="display:block">保存に失敗した場合は CATIA を終了しません。ログを確認してください。</span></li>
+        <li><span class="en">To change 15 min / 60 s, edit <code>IdleMinutes</code> / <code>WarningSeconds</code> in <code>config.json</code>, then restart the tool.</span><span class="jp" style="display:block">15 分 / 60 秒は <code>config.json</code> で変更し、ツールを再起動します。</span></li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<footer>
+  <span>CATIA Idle Guard &mdash; Quick Guide / 使い方ガイド</span>
+  <span>Details: README.md / 詳細は README.md</span>
+</footer>
+</body>
+</html>

@@ -136,3 +136,10 @@ powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startu
   **JP:** CATIA 側にモーダルダイアログ (エラー表示など) が開いたままだと COM 呼び出しが応答しないことがあります。その場合は終了処理を見送り、次回に再試行します。
 - **EN:** If several CATIA sessions run at once, COM connects to the first registered session.
   **JP:** 複数の CATIA セッションを同時に起動している場合、COM 接続先は最初に登録されたセッションになります。
+
+---
+
+## Quick guide (PDF) / 使い方ガイド (PDF)
+
+- **EN:** A one-page bilingual user guide is in `docs/CatiaIdleGuard_QuickGuide.pdf`. The source is `docs/guide.html`.
+  **JP:** 利用者向けの 1 枚ものガイド (日英併記) は `docs/CatiaIdleGuard_QuickGuide.pdf` にあります。元データは `docs/guide.html` です。
