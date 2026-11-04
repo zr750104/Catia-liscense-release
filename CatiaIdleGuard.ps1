@@ -46,11 +46,13 @@
     EN: For Windows PowerShell 5.1 (built into Windows). Does not work on PowerShell 7 (pwsh) because GetActiveObject
         is not available there; start it with Start-CatiaIdleGuard.bat.
         Do NOT run as Administrator (COM connection fails if CATIA runs at a different privilege level).
-        Keep this file saved as UTF-8 WITH BOM, otherwise Japanese text is garbled.
+        Keep this file saved as UTF-8 WITH BOM, otherwise Japanese/Thai text is garbled.
+        On-screen text is shown in English, Japanese and Thai. Logs are English/Japanese.
     JP: Windows PowerShell 5.1 (Windows 標準) 向け。PowerShell 7 (pwsh) では GetActiveObject が使えないため、
         Start-CatiaIdleGuard.bat から起動すること。
         管理者権限で実行しないこと (CATIA と権限レベルが異なると COM 接続に失敗する)。
-        このファイルは UTF-8 (BOM 付き) で保存すること。BOM が無いと日本語が文字化けする。
+        このファイルは UTF-8 (BOM 付き) で保存すること。BOM が無いと日本語/タイ語が文字化けする。
+        画面表示は英語・日本語・タイ語の 3 言語、ログは英日併記。
 #>
 
 [CmdletBinding()]
@@ -188,6 +190,17 @@ function Get-UiFontName {
 }
 $script:UiFont = Get-UiFontName
 
+# Thai font: Leelawadee UI (Windows 8+) or Tahoma (always installed) / タイ語フォント
+function Get-ThaiFontName {
+    try {
+        $installed = (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name }
+        if ($installed -contains 'Leelawadee UI') { return 'Leelawadee UI' }
+    }
+    catch { }
+    return 'Tahoma'
+}
+$script:ThaiFont = Get-ThaiFontName
+
 # ------------------------------------------------------------------
 # CATIA process / input monitoring
 # CATIA プロセス / 入力監視
@@ -307,16 +320,21 @@ function Backup-UnsavedDocuments {
         @(
             'Automatic backup by CATIA Idle Guard'
             'CATIA Idle Guard による自動バックアップ'
+            'สำรองข้อมูลอัตโนมัติโดย CATIA Idle Guard'
             ''
-            "Date / 日時: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+            "Date / 日時 / วันที่: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
             ''
             "Reason: CATIA was closed to return the license because it was not used for $($script:Config.IdleMinutes) minutes."
             "理由: $($script:Config.IdleMinutes) 分間 CATIA の操作が無かったため、ライセンス返却のために CATIA を終了しました。"
+            "เหตุผล: ปิด CATIA เพื่อคืนไลเซนส์ เนื่องจากไม่ได้ใช้งานเป็นเวลา $($script:Config.IdleMinutes) นาที"
             ''
             'The original files were NOT overwritten. If needed, open the documents in this folder and save them back to the original location.'
             '元ファイルは上書きしていません。必要な場合はこのフォルダの文書を開いて元の場所へ保存し直してください。'
+            'ไฟล์ต้นฉบับไม่ถูกเขียนทับ หากต้องการ ให้เปิดเอกสารในโฟลเดอร์นี้แล้วบันทึกกลับไปยังตำแหน่งเดิม'
             ''
-            "Saved / 保存成功: $($result.Saved)   Unsaved documents / 未保存文書: $($result.Unsaved)   Failed / 失敗: $($result.Failed)"
+            "Saved / 保存成功 / บันทึกสำเร็จ: $($result.Saved)"
+            "Unsaved documents / 未保存文書 / เอกสารที่ยังไม่ได้บันทึก: $($result.Unsaved)"
+            "Failed / 失敗 / ล้มเหลว: $($result.Failed)"
         ) | Set-Content -LiteralPath $manifest -Encoding UTF8
     }
     catch { }
@@ -407,9 +425,11 @@ function Show-WarningDialog {
     #>
     param([int]$Seconds, [int[]]$CatiaPids)
 
+    # Each language has its own label so that each one uses a font that has its glyphs
+    # 言語ごとにラベルを分け、その言語の文字を持つフォントで表示する
     $form = New-Object System.Windows.Forms.Form
     $form.Text = 'CATIA Idle Guard'
-    $form.Size = New-Object System.Drawing.Size(600, 330)
+    $form.ClientSize = New-Object System.Drawing.Size(640, 370)
     $form.StartPosition = 'CenterScreen'
     $form.TopMost = $true
     $form.FormBorderStyle = 'FixedDialog'
@@ -417,17 +437,27 @@ function Show-WarningDialog {
     $form.MinimizeBox = $false
     $form.ControlBox = $false
 
-    $label = New-Object System.Windows.Forms.Label
-    $label.AutoSize = $false
-    $label.Size = New-Object System.Drawing.Size(565, 200)
-    $label.Location = New-Object System.Drawing.Point(15, 12)
-    $label.Font = New-Object System.Drawing.Font($script:UiFont, 9.5)
-    $form.Controls.Add($label)
+    $newLabel = {
+        param([int]$Y, [int]$H, [string]$FontName, [double]$Size)
+        $l = New-Object System.Windows.Forms.Label
+        $l.AutoSize = $false
+        $l.Location = New-Object System.Drawing.Point(15, $Y)
+        $l.Size = New-Object System.Drawing.Size(610, $H)
+        $l.Font = New-Object System.Drawing.Font($FontName, $Size)
+        $form.Controls.Add($l)
+        return $l
+    }.GetNewClosure()
+
+    $labelEn   = & $newLabel 10  58 'Segoe UI'       9.5   # English
+    $labelJp   = & $newLabel 72  58 $script:UiFont   9.5   # 日本語
+    $labelTh   = & $newLabel 134 62 $script:ThaiFont 10    # ภาษาไทย
+    $labelPath = & $newLabel 200 40 $script:UiFont   8.5   # Backup folder / 保存先
+    $labelPath.ForeColor = [System.Drawing.Color]::DimGray
 
     $btnContinue = New-Object System.Windows.Forms.Button
     $btnContinue.Text = "Continue working`r`n作業を続行する"
-    $btnContinue.Size = New-Object System.Drawing.Size(240, 52)
-    $btnContinue.Location = New-Object System.Drawing.Point(45, 222)
+    $btnContinue.Size = New-Object System.Drawing.Size(260, 52)
+    $btnContinue.Location = New-Object System.Drawing.Point(45, 252)
     $btnContinue.Font = New-Object System.Drawing.Font($script:UiFont, 9.5)
     $btnContinue.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
     $form.Controls.Add($btnContinue)
@@ -435,24 +465,40 @@ function Show-WarningDialog {
 
     $btnQuit = New-Object System.Windows.Forms.Button
     $btnQuit.Text = "Save and quit now`r`n今すぐ保存して終了"
-    $btnQuit.Size = New-Object System.Drawing.Size(240, 52)
-    $btnQuit.Location = New-Object System.Drawing.Point(305, 222)
+    $btnQuit.Size = New-Object System.Drawing.Size(260, 52)
+    $btnQuit.Location = New-Object System.Drawing.Point(335, 252)
     $btnQuit.Font = New-Object System.Drawing.Font($script:UiFont, 9.5)
     $btnQuit.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $form.Controls.Add($btnQuit)
 
+    # Thai captions under the buttons / ボタン下のタイ語表記
+    foreach ($cap in @(@{ X = 45; T = 'ทำงานต่อ' }, @{ X = 335; T = 'บันทึกและปิดทันที' })) {
+        $l = New-Object System.Windows.Forms.Label
+        $l.AutoSize = $false
+        $l.TextAlign = 'MiddleCenter'
+        $l.Location = New-Object System.Drawing.Point($cap.X, 308)
+        $l.Size = New-Object System.Drawing.Size(260, 30)
+        $l.Font = New-Object System.Drawing.Font($script:ThaiFont, 10)
+        $l.Text = $cap.T
+        $form.Controls.Add($l)
+    }
+
     $state = @{ Remaining = $Seconds; Result = 'Timeout'; LastTick = [CatiaIdleGuard.Native]::GetLastInputTick() }
+    # Closures from GetNewClosure() cannot see script-scope functions, so pass the function as a scriptblock
+    # GetNewClosure() のクロージャからはスクリプトスコープの関数が見えないため、関数をスクリプトブロックとして渡す
+    $testForeground = ${function:Test-CatiaForeground}
+    $mins = $script:Config.IdleMinutes
+    $folderText = $script:Config.BackupFolder
 
     $update = {
-        $label.Text = (
-            "CATIA has not been used for {0} minutes.`r`n" +
-            "In {1} seconds, unsaved documents will be backed up and CATIA will be closed to return the license.`r`n" +
-            "`r`n" +
-            "{0} 分間 CATIA の操作がありません。`r`n" +
-            "{1} 秒後に未保存の文書をバックアップ保存して CATIA を終了し、ライセンスを返却します。`r`n" +
-            "`r`n" +
-            "Backup folder / 保存先:`r`n{2}"
-        ) -f $script:Config.IdleMinutes, $state.Remaining, $script:Config.BackupFolder
+        $sec = $state.Remaining
+        $labelEn.Text = ("CATIA has not been used for {0} minutes.`r`n" +
+            'In {1} seconds, unsaved documents will be backed up and CATIA will be closed to return the license.') -f $mins, $sec
+        $labelJp.Text = ("{0} 分間 CATIA の操作がありません。`r`n" +
+            '{1} 秒後に未保存の文書をバックアップ保存して CATIA を終了し、ライセンスを返却します。') -f $mins, $sec
+        $labelTh.Text = ("ไม่ได้ใช้งาน CATIA มาแล้ว {0} นาที`r`n" +
+            'ในอีก {1} วินาที ระบบจะสำรองเอกสารที่ยังไม่ได้บันทึก และปิด CATIA เพื่อคืนไลเซนส์') -f $mins, $sec
+        $labelPath.Text = "Backup folder / 保存先:`r`n$folderText"
     }.GetNewClosure()
     & $update
 
@@ -464,7 +510,7 @@ function Show-WarningDialog {
         $tick = [CatiaIdleGuard.Native]::GetLastInputTick()
         if ($tick -ne $state.LastTick) {
             $state.LastTick = $tick
-            if (Test-CatiaForeground -CatiaPids $CatiaPids) {
+            if (& $testForeground -CatiaPids $CatiaPids) {
                 $state.Result = 'Continue'
                 $form.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
                 return
@@ -502,21 +548,21 @@ function Initialize-Tray {
     $icon.Visible = $true
 
     $menu = New-Object System.Windows.Forms.ContextMenuStrip
-    $itemStatus = $menu.Items.Add('Status / 状態: Starting / 起動中')
+    $itemStatus = $menu.Items.Add('Status / 状態 / สถานะ: Starting / 起動中 / กำลังเริ่มต้น')
     $itemStatus.Enabled = $false
     [void]$menu.Items.Add('-')
-    $itemLog = $menu.Items.Add('Open log folder / ログフォルダを開く')
+    $itemLog = $menu.Items.Add('Open log folder / ログフォルダを開く / เปิดโฟลเดอร์ Log')
     $itemLog.Add_Click({
         if (-not (Test-Path -LiteralPath $script:Config.LogFolder)) { New-Item -ItemType Directory -Path $script:Config.LogFolder -Force | Out-Null }
         Start-Process explorer.exe $script:Config.LogFolder
     })
-    $itemBackup = $menu.Items.Add('Open backup folder / バックアップフォルダを開く')
+    $itemBackup = $menu.Items.Add('Open backup folder / バックアップフォルダを開く / เปิดโฟลเดอร์สำรองข้อมูล')
     $itemBackup.Add_Click({
         if (-not (Test-Path -LiteralPath $script:Config.BackupFolder)) { New-Item -ItemType Directory -Path $script:Config.BackupFolder -Force | Out-Null }
         Start-Process explorer.exe $script:Config.BackupFolder
     })
     [void]$menu.Items.Add('-')
-    $itemExit = $menu.Items.Add('Exit Idle Guard / Idle Guard を終了')
+    $itemExit = $menu.Items.Add('Exit Idle Guard / Idle Guard を終了 / ปิด Idle Guard')
     $itemExit.Add_Click({ $script:Running = $false })
     $icon.ContextMenuStrip = $menu
 
@@ -524,11 +570,11 @@ function Initialize-Tray {
 }
 
 function Set-TrayStatus {
-    # Menu shows EN / JP. The tooltip is English only (Windows limits it to 63 characters).
-    # メニューは日英併記。ツールチップは 63 文字制限があるため英語のみ。
-    param([string]$English, [string]$Japanese)
+    # Menu shows EN / JP / TH. The tooltip is English only (Windows limits it to 63 characters).
+    # メニューは英日タイ併記。ツールチップは 63 文字制限があるため英語のみ。
+    param([string]$English, [string]$Japanese, [string]$Thai)
     if ($null -ne $script:Tray) {
-        $script:Tray.Status.Text = "Status / 状態: $English / $Japanese"
+        $script:Tray.Status.Text = "Status / 状態 / สถานะ: $English / $Japanese / $Thai"
         $tip = 'CATIA Idle Guard - ' + $English
         if ($tip.Length -gt 63) { $tip = $tip.Substring(0, 63) }
         $script:Tray.Icon.Text = $tip
@@ -568,7 +614,7 @@ try {
                 Write-Log -Message 'CATIA exit detected. Back to standby. / CATIA の終了を検出しました。監視を待機状態に戻します。'
                 $trackedPids = @()
             }
-            Set-TrayStatus 'CATIA not running (standby)' 'CATIA 未起動 (待機中)'
+            Set-TrayStatus 'CATIA not running (standby)' 'CATIA 未起動 (待機中)' 'CATIA ไม่ได้เปิดอยู่ (รอ)'
             Wait-Poll -Milliseconds $pollMs
             continue
         }
@@ -595,11 +641,11 @@ try {
         $remain = $idleLimit - $idle
         if ($remain.TotalSeconds -gt 0) {
             $r = '{0:mm\:ss}' -f $remain
-            Set-TrayStatus "Monitoring - quit in $r" "監視中 - 終了まで $r"
+            Set-TrayStatus "Monitoring - quit in $r" "監視中 - 終了まで $r" "กำลังตรวจสอบ - ปิดในอีก $r"
         }
         else {
             Write-Log -Message ('No CATIA activity for {0:F1} min. Showing warning dialog. / {0:F1} 分間 CATIA 操作なし。警告ダイアログを表示します。' -f $idle.TotalMinutes)
-            Set-TrayStatus 'Warning shown' '警告表示中'
+            Set-TrayStatus 'Warning shown' '警告表示中' 'กำลังแสดงคำเตือน'
             $answer = Show-WarningDialog -Seconds ([int]$script:Config.WarningSeconds) -CatiaPids $pids
             Write-Log -Message "Warning dialog result / 警告ダイアログの結果: $answer"
 
@@ -608,16 +654,18 @@ try {
                 $lastInputTick = [CatiaIdleGuard.Native]::GetLastInputTick()
             }
             else {
-                Set-TrayStatus 'Closing CATIA' 'CATIA 終了処理中'
+                Set-TrayStatus 'Closing CATIA' 'CATIA 終了処理中' 'กำลังปิด CATIA'
                 $ok = Stop-CatiaSafely
                 if ($ok) {
                     Show-Balloon -Title 'CATIA Idle Guard' -Text ("CATIA was closed and the license returned. Unsaved documents are in the backup folder.`n" +
-                        'CATIA を終了し、ライセンスを返却しました。未保存文書はバックアップフォルダに保存されています。')
+                        "CATIA を終了し、ライセンスを返却しました。未保存文書はバックアップフォルダに保存されています。`n" +
+                        'ปิด CATIA และคืนไลเซนส์แล้ว เอกสารที่ยังไม่ได้บันทึกอยู่ในโฟลเดอร์สำรองข้อมูล')
                     $trackedPids = @()
                 }
                 else {
                     Show-Balloon -Title 'CATIA Idle Guard' -Text ("Could not close CATIA. Please check the log.`n" +
-                        'CATIA を終了できませんでした。ログを確認してください。')
+                        "CATIA を終了できませんでした。ログを確認してください。`n" +
+                        'ไม่สามารถปิด CATIA ได้ กรุณาตรวจสอบ Log')
                     # Grace period so the warning does not repeat immediately / 連続して警告を出し続けないよう、再判定までの猶予を設ける
                     $lastActivity = Get-Date
                 }

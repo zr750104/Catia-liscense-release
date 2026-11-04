@@ -79,8 +79,8 @@ powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startu
   **JP:** 会社のグループポリシーで実行ポリシーが `AllSigned` に固定されている場合は `-ExecutionPolicy Bypass` が効きません。その場合は情シスに署名または許可を依頼してください。
 - **EN:** The `.ps1` files are saved as **UTF-8 with BOM**. Keep the BOM when you edit them, otherwise Japanese text will be garbled.
   **JP:** `.ps1` ファイルは **UTF-8 (BOM 付き)** で保存されています。他のエディタで保存し直すときは BOM を維持してください (BOM が無いと日本語が文字化けします)。
-- **EN:** The dialog uses Meiryo UI if installed, otherwise Segoe UI. On Thai or English Windows without Japanese fonts, the Japanese text may appear as boxes, but the English text is always readable.
-  **JP:** 画面は Meiryo UI があれば使用し、無ければ Segoe UI を使います。日本語フォントの無いタイ語版/英語版 Windows では日本語が □ 表示になる場合がありますが、英語は常に表示されます。
+- **EN:** On-screen text (warning dialog, tray menu, notifications, backup `_README.txt`) is in **English, Japanese and Thai**. Logs are English/Japanese. Each language in the dialog has its own font: Segoe UI (English), Meiryo UI (Japanese, Segoe UI if missing), Leelawadee UI (Thai, Tahoma if missing). On Windows without Japanese fonts, Japanese may appear as boxes, but English and Thai stay readable.
+  **JP:** 画面表示 (警告ダイアログ、トレイメニュー、通知、バックアップの `_README.txt`) は **英語・日本語・タイ語** の 3 言語です。ログは英日併記です。ダイアログは言語ごとにフォントを分けています: Segoe UI (英語)、Meiryo UI (日本語、無ければ Segoe UI)、Leelawadee UI (タイ語、無ければ Tahoma)。日本語フォントの無い Windows では日本語が □ 表示になる場合がありますが、英語とタイ語は表示されます。
 
 ---
 
@@ -141,5 +141,5 @@ powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startu
 
 ## Quick guide (PDF) / 使い方ガイド (PDF)
 
-- **EN:** A one-page bilingual user guide is in `docs/CatiaIdleGuard_QuickGuide.pdf`. The source is `docs/guide.html`.
-  **JP:** 利用者向けの 1 枚ものガイド (日英併記) は `docs/CatiaIdleGuard_QuickGuide.pdf` にあります。元データは `docs/guide.html` です。
+- **EN:** A one-page user guide in English, Japanese and Thai is in `docs/CatiaIdleGuard_QuickGuide.pdf`. The source is `docs/guide.html`.
+  **JP:** 利用者向けの 1 枚ものガイド (英語・日本語・タイ語) は `docs/CatiaIdleGuard_QuickGuide.pdf` にあります。元データは `docs/guide.html` です。
