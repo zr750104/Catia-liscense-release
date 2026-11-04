@@ -50,6 +50,9 @@
 | `Start-CatiaIdleGuard.bat` | Normal start (no console, tray icon) | 通常起動用 (コンソール非表示・トレイ常駐) |
 | `Test-CatiaIdleGuard.bat` | Test start (1 min idle, 20 s warning, console visible) | 動作確認用 (無操作 1 分・警告 20 秒・コンソール表示) |
 | `Install-Startup.ps1` | Register/unregister auto-start at Windows sign-in | Windows サインイン時の自動起動を登録/解除 |
+| `docs/QuickGuide.html` | User guide and download page (EN / JA / TH switch) | 使い方ガイド兼ダウンロードページ (英日タイ切替) |
+| `docs/CatiaIdleGuard_QuickGuide.pdf` | One-page printable guide (EN / JA / TH) | 印刷用 1 枚ガイド (英日タイ併記) |
+| `tools/build_guide.py` | Embeds the tool files into the HTML guide | ツール一式を HTML ガイドに埋め込む |
 | `logs\` | Daily logs, deleted after 30 days | 動作ログ (日付別、30 日で自動削除) |
 
 ---
@@ -145,3 +148,11 @@ powershell -ExecutionPolicy Bypass -File "C:\Tools\CatiaIdleGuard\Install-Startu
   **JP:** 利用者向けの 1 枚ものガイド (英語・日本語・タイ語) は `docs/CatiaIdleGuard_QuickGuide.pdf` にあります。元データは `docs/guide.html` です。
 - **EN:** An HTML version with a language switch (English / 日本語 / ไทย) is in `docs/QuickGuide.html`. Open it in a browser; it works offline. The chosen language is remembered, and you can link to a language with `#en`, `#ja` or `#th`.
   **JP:** 言語を切り替えられる HTML 版 (English / 日本語 / ไทย) は `docs/QuickGuide.html` です。ブラウザで開くだけで、オフラインでも使えます。選んだ言語は記憶され、`#en` `#ja` `#th` を付けると最初からその言語で開きます。
+- **EN:** `docs/QuickGuide.html` is also the **download page**: the tool files are embedded in it as `CatiaIdleGuard.zip` and as individual files. To distribute the tool, send only this one HTML file. Users click the download button and follow the steps on the page.
+  **JP:** `docs/QuickGuide.html` は **ダウンロードページ** を兼ねます。ツール一式が `CatiaIdleGuard.zip` と個別ファイルとして埋め込まれているので、配布はこの HTML 1 ファイルを送るだけです。利用者はダウンロードボタンを押し、ページの手順どおりに進めます。
+- **EN:** After changing any tool file, re-embed the files with the command below, then commit `docs/QuickGuide.html`.
+  **JP:** ツールのファイルを変更したら、次のコマンドで埋め込みを更新し、`docs/QuickGuide.html` をコミットしてください。
+
+```bash
+python3 tools/build_guide.py
+```
