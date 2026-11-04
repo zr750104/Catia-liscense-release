@@ -10,9 +10,16 @@
 [CmdletBinding()]
 param([switch]$Remove)
 
+# $PSScriptRoot can be empty in Windows PowerShell 5.1, so use fallbacks / $PSScriptRoot が空の場合に備える
+$scriptDir = $PSScriptRoot
+if (-not $scriptDir) {
+    try { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path } catch { $scriptDir = $null }
+}
+if (-not $scriptDir) { $scriptDir = (Get-Location).Path }
+
 $startup = [Environment]::GetFolderPath('Startup')
 $lnk = Join-Path $startup 'CATIA Idle Guard.lnk'
-$bat = Join-Path $PSScriptRoot 'Start-CatiaIdleGuard.bat'
+$bat = Join-Path $scriptDir 'Start-CatiaIdleGuard.bat'
 
 if ($Remove) {
     if (Test-Path -LiteralPath $lnk) {
@@ -30,7 +37,7 @@ if (-not (Test-Path -LiteralPath $bat)) { throw "Launcher not found / 起動用�
 $shell = New-Object -ComObject WScript.Shell
 $sc = $shell.CreateShortcut($lnk)
 $sc.TargetPath = $bat
-$sc.WorkingDirectory = $PSScriptRoot
+$sc.WorkingDirectory = $scriptDir
 $sc.WindowStyle = 7   # Minimized / 最小化
 $sc.Description = 'CATIA V5 Idle Guard'
 $sc.Save()

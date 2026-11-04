@@ -57,7 +57,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = (Join-Path $PSScriptRoot 'config.json'),
+    [string]$ConfigPath,
     [double]$IdleMinutes,
     [int]$WarningSeconds,
     [switch]$NoTray
@@ -65,6 +65,25 @@ param(
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+
+# ------------------------------------------------------------------
+# Script folder / スクリプトのフォルダ
+#   EN: $PSScriptRoot can be empty in Windows PowerShell 5.1 (e.g. in param defaults), so use fallbacks.
+#   JP: Windows PowerShell 5.1 では $PSScriptRoot が空になる場合があるため、順に代替手段で求める。
+# ------------------------------------------------------------------
+$script:ScriptDir = $PSScriptRoot
+if (-not $script:ScriptDir) {
+    try { $script:ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path } catch { $script:ScriptDir = $null }
+}
+if (-not $script:ScriptDir -and $ConfigPath) {
+    $script:ScriptDir = Split-Path -Parent $ConfigPath
+}
+if (-not $script:ScriptDir) {
+    $script:ScriptDir = (Get-Location).Path
+}
+if (-not $ConfigPath) {
+    $ConfigPath = Join-Path $script:ScriptDir 'config.json'
+}
 
 # ------------------------------------------------------------------
 # Settings / 設定読み込み
@@ -98,7 +117,7 @@ function Get-Config {
     }
     $cfg.BackupFolder = [Environment]::ExpandEnvironmentVariables([string]$cfg.BackupFolder)
     if (-not [IO.Path]::IsPathRooted([string]$cfg.LogFolder)) {
-        $cfg.LogFolder = Join-Path $PSScriptRoot ([string]$cfg.LogFolder)
+        $cfg.LogFolder = Join-Path $script:ScriptDir ([string]$cfg.LogFolder)
     }
     return $cfg
 }
