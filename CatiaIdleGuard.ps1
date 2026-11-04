@@ -197,6 +197,23 @@ public static uint GetForegroundProcessId() {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# ------------------------------------------------------------------
+# Single instance / 多重起動の防止
+# ------------------------------------------------------------------
+$script:Mutex = New-Object System.Threading.Mutex($false, 'Local\CatiaIdleGuard')
+$script:HasMutex = $false
+try { $script:HasMutex = $script:Mutex.WaitOne(0, $false) }
+catch [System.Threading.AbandonedMutexException] { $script:HasMutex = $true }   # previous run crashed / 前回が異常終了
+if (-not $script:HasMutex) {
+    Write-Log -Level WARN -Message 'Already running. This second copy exits. / 既に起動しています。2 つ目は終了します。'
+    [void][System.Windows.Forms.MessageBox]::Show(
+        ("CATIA Idle Guard is already running.`r`nTo restart it, right-click the shield icon in the tray, choose Exit, then start it again.`r`n`r`n" +
+         "CATIA Idle Guard は既に起動しています。`r`n再起動する場合は、トレイの盾アイコンを右クリックして終了してから、もう一度起動してください。`r`n`r`n" +
+         "CATIA Idle Guard กำลังทำงานอยู่แล้ว`r`nหากต้องการเริ่มใหม่ ให้คลิกขวาที่ไอคอนรูปโล่ในถาดระบบ เลือกปิด แล้วเริ่มโปรแกรมอีกครั้ง"),
+        'CATIA Idle Guard', 'OK', 'Information')
+    exit 0
+}
+
 # UI font: Meiryo UI if installed (Japanese Windows), otherwise Segoe UI (e.g. Thai/English Windows)
 # 画面フォント: Meiryo UI があれば使用、無ければ Segoe UI (タイ語版/英語版 Windows 対策)
 function Get-UiFontName {
@@ -267,6 +284,25 @@ function Remove-ComReference {
     }
 }
 
+# CATIA objects are called by name through IDispatch (late binding).
+# PowerShell's normal property access cannot see CATIA properties such as Documents.Count.
+# CATIA のオブジェクトは名前指定 (IDispatch の遅延バインディング) で呼び出す。
+# PowerShell の通常のプロパティ参照では Documents.Count などが見えないため。
+function Get-ComProperty {
+    param($Obj, [string]$Name)
+    return [System.__ComObject].InvokeMember($Name, [System.Reflection.BindingFlags]::GetProperty, $null, $Obj, $null)
+}
+
+function Set-ComProperty {
+    param($Obj, [string]$Name, $Value)
+    [void][System.__ComObject].InvokeMember($Name, [System.Reflection.BindingFlags]::SetProperty, $null, $Obj, @($Value))
+}
+
+function Invoke-ComMethod {
+    param($Obj, [string]$Name, [object[]]$Arguments = @())
+    return [System.__ComObject].InvokeMember($Name, [System.Reflection.BindingFlags]::InvokeMethod, $null, $Obj, $Arguments)
+}
+
 function Get-UniquePath {
     param([string]$Folder, [string]$Name)
     $target = Join-Path $Folder $Name
@@ -293,16 +329,23 @@ function Backup-UnsavedDocuments {
     param([Parameter(Mandatory)]$Catia)
 
     $result = @{ Total = 0; Unsaved = 0; Saved = 0; Failed = 0; Folder = $null }
-    $docs = $Catia.Documents
-    $result.Total = [int]$docs.Count
+    $docs = Get-ComProperty $Catia 'Documents'
+    $result.Total = [int](Get-ComProperty $docs 'Count')
     if ($result.Total -eq 0) { return $result }
 
+    # Each entry: @{ Doc = COM object; Name = file name }
     $unsaved = New-Object System.Collections.ArrayList
     for ($i = 1; $i -le $result.Total; $i++) {
         # On failure, let the exception propagate (never abandon a document whose state is unknown)
         # ここで失敗したら例外のまま上位へ (状態不明の文書を見捨てない)
-        $doc = $docs.Item($i)
-        if (-not $doc.Saved) { [void]$unsaved.Add($doc) }
+        $doc = Invoke-ComMethod $docs 'Item' @([int]$i)
+        $name = [string](Get-ComProperty $doc 'Name')
+        # CATIA keeps hidden feature catalogs (*.CATfct) open in the background; they are not user documents
+        # CATIA は *.CATfct (フィーチャーカタログ) を裏で開いたままにする。利用者の文書ではないので対象外
+        if ($name -like '*.CATfct') { continue }
+        if (-not [bool](Get-ComProperty $doc 'Saved')) {
+            [void]$unsaved.Add(@{ Doc = $doc; Name = $name })
+        }
     }
     $result.Unsaved = $unsaved.Count
     if ($result.Unsaved -eq 0) { return $result }
@@ -316,14 +359,13 @@ function Backup-UnsavedDocuments {
     $ordered = @($unsaved | Where-Object { $_.Name -notlike '*.CATProduct' }) +
                @($unsaved | Where-Object { $_.Name -like '*.CATProduct' })
 
-    foreach ($doc in $ordered) {
-        $name = 'unknown'
+    foreach ($entry in $ordered) {
+        $name = $entry.Name
         try {
-            $name = [string]$doc.Name
             $original = ''
-            try { $original = [string]$doc.FullName } catch { }
+            try { $original = [string](Get-ComProperty $entry.Doc 'FullName') } catch { }
             $target = Get-UniquePath -Folder $folder -Name $name
-            $doc.SaveAs($target)
+            [void](Invoke-ComMethod $entry.Doc 'SaveAs' @([string]$target))
             $result.Saved++
             Write-Log -Message "Backup saved / バックアップ保存: $name -> $target (original / 元: $original)"
         }
@@ -372,6 +414,17 @@ function Stop-CatiaSafely {
 
     $catia = Connect-Catia
     if ($null -ne $catia) {
+        # Suppress CATIA confirmation dialogs so that SaveAs/Quit never wait for a click
+        # 保存/終了の途中で CATIA の確認画面が出て止まらないよう、確認表示を止める
+        $alertsBefore = $null
+        try {
+            $alertsBefore = Get-ComProperty $catia 'DisplayFileAlerts'
+            Set-ComProperty $catia 'DisplayFileAlerts' $false
+        }
+        catch {
+            Write-Log -Level WARN -Message "Could not turn off CATIA file alerts / CATIA の確認表示を止められません: $($_.Exception.Message)"
+        }
+
         $backup = $null
         try {
             $backup = Backup-UnsavedDocuments -Catia $catia
@@ -383,13 +436,15 @@ function Stop-CatiaSafely {
 
         if ($null -eq $backup -or $backup.Failed -gt 0) {
             Write-Log -Level WARN -Message 'CATIA was NOT closed because unsaved documents may not be protected. Will retry at the next idle check. / 未保存文書を保護できない可能性があるため CATIA を終了しません。次回の無操作判定で再試行します。'
+            if ($null -ne $alertsBefore) {
+                try { Set-ComProperty $catia 'DisplayFileAlerts' ([bool]$alertsBefore) } catch { }
+            }
             Remove-ComReference $catia
             return $false
         }
 
         try {
-            try { $catia.DisplayFileAlerts = $false } catch { }
-            $catia.Quit()
+            [void](Invoke-ComMethod $catia 'Quit')
             Write-Log -Message 'Sent CATIA.Application.Quit() / CATIA.Application.Quit() を送信しました。'
         }
         catch {
@@ -698,6 +753,9 @@ finally {
     if ($null -ne $script:Tray) {
         $script:Tray.Icon.Visible = $false
         $script:Tray.Icon.Dispose()
+    }
+    if ($script:HasMutex) {
+        try { $script:Mutex.ReleaseMutex() } catch { }
     }
     Write-Log -Message 'CATIA Idle Guard stopped / 終了しました。'
 }
