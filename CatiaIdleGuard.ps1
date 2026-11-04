@@ -288,19 +288,49 @@ function Remove-ComReference {
 # PowerShell's normal property access cannot see CATIA properties such as Documents.Count.
 # CATIA のオブジェクトは名前指定 (IDispatch の遅延バインディング) で呼び出す。
 # PowerShell の通常のプロパティ参照では Documents.Count などが見えないため。
+#
+# NOTE: results are returned with the unary comma (return ,$x). Without it, PowerShell unrolls
+#       enumerable COM objects such as CATIA.Documents into their items.
+# 注意: 結果はカンマ演算子付き (return ,$x) で返す。付けないと PowerShell が CATIA.Documents のような
+#       列挙可能な COM オブジェクトを中身の要素に展開してしまう。
+function Get-ComErrorText {
+    # InnerException holds the real COM error (e.g. DISP_E_UNKNOWNNAME) / 本当の COM エラーは InnerException 側にある
+    param($ErrorRecord)
+    $ex = $ErrorRecord.Exception
+    if ($null -ne $ex.InnerException) { return $ex.InnerException.Message }
+    return $ex.Message
+}
+
 function Get-ComProperty {
     param($Obj, [string]$Name)
-    return [System.__ComObject].InvokeMember($Name, [System.Reflection.BindingFlags]::GetProperty, $null, $Obj, $null)
+    try {
+        $value = [System.__ComObject].InvokeMember($Name, [System.Reflection.BindingFlags]::GetProperty, $null, $Obj, $null)
+    }
+    catch {
+        throw "COM get '$Name' failed / COM 取得 '$Name' に失敗: $(Get-ComErrorText $_)"
+    }
+    return ,$value
 }
 
 function Set-ComProperty {
     param($Obj, [string]$Name, $Value)
-    [void][System.__ComObject].InvokeMember($Name, [System.Reflection.BindingFlags]::SetProperty, $null, $Obj, @($Value))
+    try {
+        [void][System.__ComObject].InvokeMember($Name, [System.Reflection.BindingFlags]::SetProperty, $null, $Obj, @($Value))
+    }
+    catch {
+        throw "COM set '$Name' failed / COM 設定 '$Name' に失敗: $(Get-ComErrorText $_)"
+    }
 }
 
 function Invoke-ComMethod {
     param($Obj, [string]$Name, [object[]]$Arguments = @())
-    return [System.__ComObject].InvokeMember($Name, [System.Reflection.BindingFlags]::InvokeMethod, $null, $Obj, $Arguments)
+    try {
+        $value = [System.__ComObject].InvokeMember($Name, [System.Reflection.BindingFlags]::InvokeMethod, $null, $Obj, $Arguments)
+    }
+    catch {
+        throw "COM call '$Name' failed / COM 呼び出し '$Name' に失敗: $(Get-ComErrorText $_)"
+    }
+    return ,$value
 }
 
 function Get-UniquePath {
@@ -731,15 +761,16 @@ try {
                 Set-TrayStatus 'Closing CATIA' 'CATIA 終了処理中' 'กำลังปิด CATIA'
                 $ok = Stop-CatiaSafely
                 if ($ok) {
-                    Show-Balloon -Title 'CATIA Idle Guard' -Text ("CATIA was closed and the license returned. Unsaved documents are in the backup folder.`n" +
-                        "CATIA を終了し、ライセンスを返却しました。未保存文書はバックアップフォルダに保存されています。`n" +
-                        'ปิด CATIA และคืนไลเซนส์แล้ว เอกสารที่ยังไม่ได้บันทึกอยู่ในโฟลเดอร์สำรองข้อมูล')
+                    # Keep one short line per language so all three fit / 3 言語が収まるよう各言語 1 行に短くする
+                    Show-Balloon -Title 'CATIA Idle Guard' -Text ("CATIA closed. License returned.`n" +
+                        "CATIA を終了し、ライセンスを返却`n" +
+                        'ปิด CATIA และคืนไลเซนส์แล้ว')
                     $trackedPids = @()
                 }
                 else {
-                    Show-Balloon -Title 'CATIA Idle Guard' -Text ("Could not close CATIA. Please check the log.`n" +
-                        "CATIA を終了できませんでした。ログを確認してください。`n" +
-                        'ไม่สามารถปิด CATIA ได้ กรุณาตรวจสอบ Log')
+                    Show-Balloon -Title 'CATIA Idle Guard' -Text ("CATIA not closed. See the log.`n" +
+                        "CATIA を終了できません。ログ参照`n" +
+                        'ปิด CATIA ไม่ได้ กรุณาดู Log')
                     # Grace period so the warning does not repeat immediately / 連続して警告を出し続けないよう、再判定までの猶予を設ける
                     $lastActivity = Get-Date
                 }
